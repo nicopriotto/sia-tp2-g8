@@ -1,0 +1,15 @@
+{
+    "triangle_count": 10,
+    "population_size": 20,
+    "max_generations": 100,
+    "fitness_threshold": 0.95,
+    "selection_method": "elite",
+    "crossover_methods": ["one_point"],
+    "crossover_probability": 0.7,
+    "mutation_methods": ["gen"],
+    "mutation_rate": 0.05,
+    "survival_strategy": "generational",
+    "fitness_function": "mse",
+    "k_offspring": 16,
+    "save_every": 10
+}
