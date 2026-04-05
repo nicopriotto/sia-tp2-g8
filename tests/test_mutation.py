@@ -189,3 +189,50 @@ def test_uniform_mutation_approx_rate():
 
     avg = total_changed / n_trials
     assert 3 <= avg <= 7, f"Expected avg ~5, got {avg:.2f}"
+
+
+from mutation.complete_mutation import CompleteMutation
+
+
+def test_complete_mutation_rate_zero():
+    random.seed(5)
+    mutation = CompleteMutation(mutation_rate=0.0)
+    original = _make_individual(10)
+
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        assert _changed_gene_count(original, mutated) == 0
+
+
+def test_complete_mutation_rate_one():
+    random.seed(6)
+    mutation = CompleteMutation(mutation_rate=1.0)
+    original = _make_individual(10)
+
+    mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+    assert _changed_gene_count(original, mutated) == 10
+
+
+def test_complete_mutation_all_or_nothing():
+    random.seed(7)
+    mutation = CompleteMutation(mutation_rate=0.5)
+    original = _make_individual(10)
+
+    for _ in range(200):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        changed = _changed_gene_count(original, mutated)
+        assert changed == 0 or changed == 10, f"Expected 0 or 10, got {changed}"
+
+
+def test_complete_mutation_approx_rate():
+    random.seed(8)
+    mutation = CompleteMutation(mutation_rate=0.5)
+    original = _make_individual(10)
+
+    full_mutations = 0
+    for _ in range(1000):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        if _changed_gene_count(original, mutated) == 10:
+            full_mutations += 1
+
+    assert 400 <= full_mutations <= 600, f"Expected ~500, got {full_mutations}"
