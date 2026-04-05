@@ -5,6 +5,7 @@ import time
 import numpy as np
 
 from config.config_loader import Config
+from core.metrics_collector import MetricsCollector
 from crossover.crossover_operator import CrossoverOperator
 from fitness.fitness_function import FitnessFunction
 from mutation.mutation_operator import MutationOperator
@@ -42,8 +43,24 @@ class GeneticAlgorithm:
     def run(self) -> Population:
         """Ejecuta el ciclo evolutivo completo y retorna la poblacion final."""
         config = self.config
+        height, width = self.target_image.shape[0], self.target_image.shape[1]
+
+        collector = MetricsCollector(
+            output_dir="output",
+            save_every=config.save_every,
+            renderer=self.renderer,
+            width=width,
+            height=height,
+        )
+        collector.init_csv()
+
+        start_time = time.time()
+
         population = Population.random(config.population_size, config.triangle_count)
         population.evaluate_all(self.target_image, self.renderer, self.fitness_fn)
+
+        collector.log_generation(0, population, time.time() - start_time)
+        collector.save_snapshot(0, population.best)
 
         logger.info(
             "Poblacion inicial | Best: %.4f | Avg: %.4f | Std: %.4f",
@@ -53,6 +70,7 @@ class GeneticAlgorithm:
         )
 
         stop_reason: str | None = None
+        last_generation = 0
 
         for generation in range(1, config.max_generations + 1):
             generation_start = time.time()
@@ -84,6 +102,10 @@ class GeneticAlgorithm:
 
             population = self.survival.apply(population, children, self.selection)
 
+            elapsed = time.time() - start_time
+            collector.log_generation(generation, population, elapsed)
+            collector.save_snapshot(generation, population.best)
+
             generation_time = time.time() - generation_start
             logger.info(
                 "Gen %d | Best: %.4f | Avg: %.4f | Std: %.4f | Time: %.1fs",
@@ -93,6 +115,8 @@ class GeneticAlgorithm:
                 population.fitness_std,
                 generation_time,
             )
+
+            last_generation = generation
 
             if generation >= config.max_generations:
                 stop_reason = f"Maximo de generaciones alcanzado ({config.max_generations})"
@@ -106,6 +130,9 @@ class GeneticAlgorithm:
 
         if stop_reason is None:
             stop_reason = "Loop completado sin condicion de corte"
+
+        collector.save_final_result(population.best, config, last_generation)
+        collector.save_final_image(population.best)
 
         logger.info("=== FIN ===")
         logger.info("Motivo de corte: %s", stop_reason)

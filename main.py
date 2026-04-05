@@ -1,6 +1,4 @@
-import json
 import logging
-import os
 import sys
 
 import numpy as np
@@ -42,15 +40,6 @@ def run_from_paths(image_path: str, config_path: str):
     )
 
     population = ga.run()
-
-    os.makedirs("output", exist_ok=True)
-    best = population.best
-    best_image = renderer.render(best.genes, target.shape[1], target.shape[0])
-    best_pil = Image.fromarray((best_image * 255).astype(np.uint8))
-    best_pil.save("output/final.png")
-
-    with open("output/triangles.json", "w", encoding="utf-8") as file:
-        json.dump(best.to_dict(), file, indent=2)
 
     logging.info("Output guardado en output/final.png y output/triangles.json")
     return population
