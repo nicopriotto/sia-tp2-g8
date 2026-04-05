@@ -132,3 +132,60 @@ def test_multigen_mutates_at_least_one():
     for _ in range(100):
         mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
         assert _changed_gene_count(original, mutated) >= 1
+
+
+from mutation.uniform_mutation import UniformMutation
+
+
+def test_uniform_mutation_rate_zero():
+    random.seed(1)
+    mutation = UniformMutation(mutation_rate=0.0)
+    original = _make_individual(20)
+
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        assert _changed_gene_count(original, mutated) == 0
+
+
+def test_uniform_mutation_rate_one():
+    random.seed(2)
+    mutation = UniformMutation(mutation_rate=1.0)
+    original = _make_individual(20)
+
+    mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+    assert _changed_gene_count(original, mutated) == 20
+
+
+def test_uniform_mutation_independent():
+    random.seed(3)
+    mutation = UniformMutation(mutation_rate=0.5)
+    original = _make_individual(10)
+
+    per_gene_count = [0] * 10
+    n_trials = 1000
+
+    for _ in range(n_trials):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        for i in range(10):
+            if _gene_signature(original.genes[i]) != _gene_signature(mutated.genes[i]):
+                per_gene_count[i] += 1
+
+    for i, count in enumerate(per_gene_count):
+        freq = count / n_trials
+        assert 0.35 <= freq <= 0.65, f"Gene {i}: expected ~0.50, got {freq:.2f}"
+
+
+def test_uniform_mutation_approx_rate():
+    random.seed(4)
+    mutation = UniformMutation(mutation_rate=0.1)
+    original = _make_individual(50)
+
+    total_changed = 0
+    n_trials = 1000
+
+    for _ in range(n_trials):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        total_changed += _changed_gene_count(original, mutated)
+
+    avg = total_changed / n_trials
+    assert 3 <= avg <= 7, f"Expected avg ~5, got {avg:.2f}"
