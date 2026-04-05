@@ -115,3 +115,8 @@ def _validate_config(config: Config) -> None:
             f"fitness_function '{config.fitness_function}' no es valido. "
             f"Opciones: {VALID_FITNESS_FUNCTIONS}"
         )
+
+    if not (0.0 <= config.generational_gap <= 1.0):
+        raise ValueError(
+            f"generational_gap debe estar en [0, 1], recibido: {config.generational_gap}"
+        )

@@ -69,12 +69,16 @@ class GeneticAlgorithm:
             population.fitness_std,
         )
 
+        k_offspring = max(2, int(config.generational_gap * config.population_size))
+        if k_offspring % 2 != 0:
+            k_offspring += 1
+
         stop_reason: str | None = None
         last_generation = 0
 
         for generation in range(1, config.max_generations + 1):
             generation_start = time.time()
-            parents = self.selection.select(population, config.k_offspring, generation=generation)
+            parents = self.selection.select(population, k_offspring, generation=generation)
             crossover_op = random.choice(self.crossover_ops)
             mutation_op = random.choice(self.mutation_ops)
 

@@ -214,3 +214,22 @@ MAE = (1 / N) * sum(|gen_i - target_i|)
 - **MAE** es mas robusto a outliers: un pixel muy diferente no domina tanto el error total.
 - **MSE** penaliza mas los errores grandes, generando mayor gradiente para corregirlos.
 - Para este problema, MSE es preferible porque queremos eliminar los defectos visuales mas notorios primero. MAE se implementa como alternativa (TASK-029) para experimentacion comparativa.
+
+---
+
+## Brecha Generacional (G)
+
+G controla que fraccion de la poblacion se renueva por generacion.
+
+**Formula:** `k = max(2, int(G * N))`, ajustado a par si es impar.
+
+**Interaccion con estrategias de supervivencia:**
+- Con **Aditiva**: se forma un pool de (N + k) individuos, se seleccionan N.
+- Con **Exclusiva**: si k >= N, solo hijos; si k < N, todos los hijos + (N-k) padres.
+
+| G | N=20 | k_offspring | Comportamiento |
+|---|------|-------------|----------------|
+| 1.0 | 20 | 20 | Reemplazo completo |
+| 0.5 | 20 | 10 | Mitad se renueva |
+| 0.1 | 20 | 2 | Minimo: solo 2 hijos |
+| 0.0 | 20 | 2 | Minimo forzado |
