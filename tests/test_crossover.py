@@ -2,6 +2,7 @@ import random
 
 from core.individual import Individual
 from crossover.one_point import OnePointCrossover
+from crossover.two_point import TwoPointCrossover
 from genes.triangle_gene import TriangleGene
 
 
@@ -75,3 +76,50 @@ def test_one_point_fitness_zero():
 
     assert child1.fitness == 0.0
     assert child2.fitness == 0.0
+
+
+def test_two_point_child_length():
+    parent1 = _make_parent(list(range(1, 11)))
+    parent2 = _make_parent(list(range(11, 21)))
+
+    child1, child2 = TwoPointCrossover().crossover(parent1, parent2)
+
+    assert len(child1.genes) == 10
+    assert len(child2.genes) == 10
+
+
+def test_two_point_segment_swapped():
+    parent1 = _make_parent([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    parent2 = _make_parent([11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+    seed = 42
+
+    random.seed(seed)
+    a = random.randint(0, 9)
+    b = random.randint(0, 9)
+    p1, p2 = (a, b) if a <= b else (b, a)
+
+    random.seed(seed)
+    child1, child2 = TwoPointCrossover().crossover(parent1, parent2)
+
+    # Outside segment: child1 gets p1's genes, child2 gets p2's genes
+    for i in list(range(0, p1)) + list(range(p2, 10)):
+        assert child1.genes[i].r == parent1.genes[i].r
+        assert child2.genes[i].r == parent2.genes[i].r
+    # Inside segment [p1:p2]: swapped
+    for i in range(p1, p2):
+        assert child1.genes[i].r == parent2.genes[i].r
+        assert child2.genes[i].r == parent1.genes[i].r
+
+
+def test_two_point_copy_independence():
+    parent1 = _make_parent([1, 2, 3, 4, 5])
+    parent2 = _make_parent([11, 12, 13, 14, 15])
+
+    child1, _ = TwoPointCrossover().crossover(parent1, parent2)
+    original_r_p1 = parent1.genes[0].r
+    original_r_p2 = parent2.genes[0].r
+
+    child1.genes[0].r = 999
+
+    assert parent1.genes[0].r == original_r_p1
+    assert parent2.genes[0].r == original_r_p2
