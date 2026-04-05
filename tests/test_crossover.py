@@ -3,6 +3,7 @@ import random
 from core.individual import Individual
 from crossover.one_point import OnePointCrossover
 from crossover.two_point import TwoPointCrossover
+from crossover.uniform import UniformCrossover
 from genes.triangle_gene import TriangleGene
 
 
@@ -116,6 +117,60 @@ def test_two_point_copy_independence():
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, _ = TwoPointCrossover().crossover(parent1, parent2)
+    original_r_p1 = parent1.genes[0].r
+    original_r_p2 = parent2.genes[0].r
+
+    child1.genes[0].r = 999
+
+    assert parent1.genes[0].r == original_r_p1
+    assert parent2.genes[0].r == original_r_p2
+
+
+def test_uniform_p0_no_swap():
+    parent1 = _make_parent([1, 2, 3, 4, 5])
+    parent2 = _make_parent([11, 12, 13, 14, 15])
+
+    child1, child2 = UniformCrossover(p=0.0).crossover(parent1, parent2)
+
+    for i in range(5):
+        assert child1.genes[i].r == parent1.genes[i].r
+        assert child2.genes[i].r == parent2.genes[i].r
+
+
+def test_uniform_p1_full_swap():
+    parent1 = _make_parent([1, 2, 3, 4, 5])
+    parent2 = _make_parent([11, 12, 13, 14, 15])
+
+    child1, child2 = UniformCrossover(p=1.0).crossover(parent1, parent2)
+
+    for i in range(5):
+        assert child1.genes[i].r == parent2.genes[i].r
+        assert child2.genes[i].r == parent1.genes[i].r
+
+
+def test_uniform_p05_approx_half():
+    parent1 = _make_parent(list(range(1, 21)))
+    parent2 = _make_parent(list(range(21, 41)))
+    op = UniformCrossover(p=0.5)
+
+    total_swapped = 0
+    n_trials = 1000
+
+    random.seed(99)
+    for _ in range(n_trials):
+        child1, _ = op.crossover(parent1, parent2)
+        swapped = sum(1 for i in range(20) if child1.genes[i].r == parent2.genes[i].r)
+        total_swapped += swapped
+
+    avg_fraction = total_swapped / (n_trials * 20)
+    assert 0.40 <= avg_fraction <= 0.60, f"Expected ~0.50, got {avg_fraction:.2f}"
+
+
+def test_uniform_copy_independence():
+    parent1 = _make_parent([1, 2, 3, 4, 5])
+    parent2 = _make_parent([11, 12, 13, 14, 15])
+
+    child1, _ = UniformCrossover(p=0.5).crossover(parent1, parent2)
     original_r_p1 = parent1.genes[0].r
     original_r_p2 = parent2.genes[0].r
 
