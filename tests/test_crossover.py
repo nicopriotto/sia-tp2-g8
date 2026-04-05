@@ -1,6 +1,8 @@
 import random
+from unittest.mock import patch
 
 from core.individual import Individual
+from crossover.annular import AnnularCrossover
 from crossover.one_point import OnePointCrossover
 from crossover.two_point import TwoPointCrossover
 from crossover.uniform import UniformCrossover
@@ -171,6 +173,67 @@ def test_uniform_copy_independence():
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, _ = UniformCrossover(p=0.5).crossover(parent1, parent2)
+    original_r_p1 = parent1.genes[0].r
+    original_r_p2 = parent2.genes[0].r
+
+    child1.genes[0].r = 999
+
+    assert parent1.genes[0].r == original_r_p1
+    assert parent2.genes[0].r == original_r_p2
+
+
+def test_annular_slide_example():
+    """P=11, L=5 on 12-gene chromosome swaps indices [11,0,1,2,3]."""
+    parent1 = _make_parent(list(range(1, 13)))
+    parent2 = _make_parent(list(range(101, 113)))
+
+    with patch("crossover.annular.random.randint", side_effect=[11, 5]):
+        child1, child2 = AnnularCrossover().crossover(parent1, parent2)
+
+    swap_indices = {11, 0, 1, 2, 3}
+    for i in range(12):
+        if i in swap_indices:
+            assert child1.genes[i].r == parent2.genes[i].r
+            assert child2.genes[i].r == parent1.genes[i].r
+        else:
+            assert child1.genes[i].r == parent1.genes[i].r
+            assert child2.genes[i].r == parent2.genes[i].r
+
+
+def test_annular_wrapping():
+    """n=10, P=8, L=4 => swap indices [8,9,0,1]."""
+    parent1 = _make_parent(list(range(1, 11)))
+    parent2 = _make_parent(list(range(101, 111)))
+
+    with patch("crossover.annular.random.randint", side_effect=[8, 4]):
+        child1, child2 = AnnularCrossover().crossover(parent1, parent2)
+
+    swap_indices = {8, 9, 0, 1}
+    for i in range(10):
+        if i in swap_indices:
+            assert child1.genes[i].r == parent2.genes[i].r
+        else:
+            assert child1.genes[i].r == parent1.genes[i].r
+
+
+def test_annular_l0_no_swap():
+    """L=0 means no genes are swapped — children are copies of parents."""
+    parent1 = _make_parent([1, 2, 3, 4, 5])
+    parent2 = _make_parent([11, 12, 13, 14, 15])
+
+    with patch("crossover.annular.random.randint", side_effect=[2, 0]):
+        child1, child2 = AnnularCrossover().crossover(parent1, parent2)
+
+    for i in range(5):
+        assert child1.genes[i].r == parent1.genes[i].r
+        assert child2.genes[i].r == parent2.genes[i].r
+
+
+def test_annular_copy_independence():
+    parent1 = _make_parent([1, 2, 3, 4, 5])
+    parent2 = _make_parent([11, 12, 13, 14, 15])
+
+    child1, _ = AnnularCrossover().crossover(parent1, parent2)
     original_r_p1 = parent1.genes[0].r
     original_r_p2 = parent2.genes[0].r
 
