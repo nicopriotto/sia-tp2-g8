@@ -66,7 +66,43 @@ Si la mutacion delta produce un triangulo degenerado (area = 0, vertices colinea
 
 Dado que el orden de los triangulos afecta el renderizado (superposicion), One Point y Two Point pueden preservar sub-secuencias utiles de capas. La cruza puede generar buenos descendientes porque un hijo hereda zonas bien aproximadas de cada padre: si padre A tiene bien el cielo y padre B tiene bien el suelo, el hijo puede tener ambas cosas bien.
 
-La probabilidad de crossover (Pc) controla si la cruza efectivamente ocurre. Si no ocurre, los hijos son copias de los padres pero siguen pasando por mutacion. Valores tipicos: Pc en [0.6, 0.9].
+La probabilidad de crossover (Pc) controla si la cruza efectivamente ocurre. Su rol y uso concreto se detallan en la seccion siguiente.
+
+### Probabilidad de Recombinacion (Pc)
+
+**Definicion de Pc**
+
+- Pc (`crossover_probability`) es la probabilidad de que el operador de crossover se aplique al aparear dos padres.
+- Con probabilidad Pc: se ejecuta el crossover y se generan hijos recombinados.
+- Con probabilidad `1 - Pc`: los hijos son copias exactas de los padres, sin recombinacion.
+- En ambos casos, los hijos pasan por la etapa de mutacion posterior.
+
+En este proyecto, este parametro ya existe en la configuracion como `crossover_probability` dentro de la dataclass `Config`.
+
+**Por que existe Pc**
+
+- Protege combinaciones de genes que funcionan bien juntas. Si un individuo ya tiene un conjunto de triangulos en posiciones utiles, el crossover puede romper esa combinacion.
+- Permite que buenos genotipos pasen a la siguiente generacion con solo mutaciones menores, sin forzar recombinacion en todos los apareamientos.
+- Agrega control sobre el balance entre exploracion y explotacion del algoritmo.
+
+**Valores tipicos y extremos**
+
+- Rango tipico: Pc entre 0.6 y 0.9.
+- `Pc = 1.0`: el crossover siempre ocurre, sin proteccion de combinaciones utiles.
+- `Pc = 0.0`: el crossover nunca ocurre y la unica fuente de variacion pasa a ser la mutacion.
+
+**Donde se aplica en el loop del GA**
+
+```python
+if random() < crossover_probability:
+    hijo1, hijo2 = crossover_op.crossover(p1, p2)
+else:
+    hijo1, hijo2 = p1.copy(), p2.copy()
+
+# En ambos casos, aplicar mutacion despues
+```
+
+Este pseudocodigo se implementara de forma concreta en el loop principal del algoritmo genetico.
 
 ### 6. Version mas simple posible?
 
