@@ -7,7 +7,7 @@ from selection.selection_strategy import SelectionStrategy
 
 
 class RankingSelection(SelectionStrategy):
-    def select(self, population: Population, k: int) -> list[Individual]:
+    def select(self, population: Population, k: int, generation: int = 0) -> list[Individual]:
         if k == 0:
             return []
 

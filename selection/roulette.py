@@ -27,7 +27,7 @@ def _select_from_cumulative(q: np.ndarray, r_values: np.ndarray) -> list[int]:
 
 
 class RouletteSelection(SelectionStrategy):
-    def select(self, population: Population, k: int) -> list[Individual]:
+    def select(self, population: Population, k: int, generation: int = 0) -> list[Individual]:
         if k == 0:
             return []
 

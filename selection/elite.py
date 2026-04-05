@@ -8,7 +8,7 @@ from selection.selection_strategy import SelectionStrategy
 class EliteSelection(SelectionStrategy):
     """Seleccion deterministica que prioriza a los individuos mas aptos."""
 
-    def select(self, population: Population, k: int) -> list[Individual]:
+    def select(self, population: Population, k: int, generation: int = 0) -> list[Individual]:
         """Selecciona individuos segun la formula elite 0-indexed."""
         sorted_individuals = sorted(
             population.individuals,

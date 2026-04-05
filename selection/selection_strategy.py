@@ -8,7 +8,7 @@ class SelectionStrategy(ABC):
     """Clase base abstracta para estrategias de seleccion."""
 
     @abstractmethod
-    def select(self, population: Population, k: int) -> list[Individual]:
+    def select(self, population: Population, k: int, generation: int = 0) -> list[Individual]:
         """Selecciona k individuos de la poblacion.
 
         Args:

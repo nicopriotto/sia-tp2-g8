@@ -74,7 +74,7 @@ class GeneticAlgorithm:
 
         for generation in range(1, config.max_generations + 1):
             generation_start = time.time()
-            parents = self.selection.select(population, config.k_offspring)
+            parents = self.selection.select(population, config.k_offspring, generation=generation)
             crossover_op = random.choice(self.crossover_ops)
             mutation_op = random.choice(self.mutation_ops)
 
