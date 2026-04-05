@@ -89,3 +89,46 @@ def test_gen_mutation_approximate_rate():
             mutated_count += 1
 
     assert 400 <= mutated_count <= 600
+
+
+from mutation.multigen_mutation import MultiGenMutation
+
+
+def test_multigen_m1_equals_gen():
+    random.seed(42)
+    mutation = MultiGenMutation(mutation_rate=1.0, max_genes=1)
+    original = _make_individual(10)
+
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        assert _changed_gene_count(original, mutated) == 1
+
+
+def test_multigen_max_genes_respected():
+    random.seed(7)
+    mutation = MultiGenMutation(mutation_rate=1.0, max_genes=3)
+    original = _make_individual(10)
+
+    for _ in range(1000):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        assert _changed_gene_count(original, mutated) <= 3
+
+
+def test_multigen_rate_zero():
+    random.seed(99)
+    mutation = MultiGenMutation(mutation_rate=0.0, max_genes=5)
+    original = _make_individual(10)
+
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        assert _changed_gene_count(original, mutated) == 0
+
+
+def test_multigen_mutates_at_least_one():
+    random.seed(11)
+    mutation = MultiGenMutation(mutation_rate=1.0, max_genes=5)
+    original = _make_individual(10)
+
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
+        assert _changed_gene_count(original, mutated) >= 1
