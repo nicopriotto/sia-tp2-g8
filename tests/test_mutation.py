@@ -236,3 +236,96 @@ def test_complete_mutation_approx_rate():
             full_mutations += 1
 
     assert 400 <= full_mutations <= 600, f"Expected ~500, got {full_mutations}"
+
+
+from mutation.non_uniform_mutation import NonUniformMutation
+
+
+def _gene_distance(g1, g2) -> float:
+    """Promedio de diferencias absolutas en coordenadas y alpha."""
+    return (
+        abs(g1.x1 - g2.x1) + abs(g1.y1 - g2.y1) +
+        abs(g1.x2 - g2.x2) + abs(g1.y2 - g2.y2) +
+        abs(g1.x3 - g2.x3) + abs(g1.y3 - g2.y3) +
+        abs(g1.a - g2.a)
+    ) / 7
+
+
+def test_non_uniform_strength_decreases():
+    mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
+    max_gen = 100
+
+    s0 = (1 - 0 / max_gen) ** 5.0
+    s50 = (1 - 50 / max_gen) ** 5.0
+    s100 = (1 - 100 / max_gen) ** 5.0
+
+    assert s0 > s50 > s100
+    assert s0 == 1.0
+    assert abs(s50 - 0.03125) < 1e-9
+    assert s100 == 0.0
+
+
+def test_non_uniform_early_large_delta():
+    random.seed(10)
+    mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
+    original = _make_individual(10)
+
+    early_distances = []
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=0, max_generations=1000)
+        changed = [i for i in range(10) if _gene_signature(original.genes[i]) != _gene_signature(mutated.genes[i])]
+        if changed:
+            early_distances.append(_gene_distance(original.genes[changed[0]], mutated.genes[changed[0]]))
+
+    late_distances = []
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=900, max_generations=1000)
+        changed = [i for i in range(10) if _gene_signature(original.genes[i]) != _gene_signature(mutated.genes[i])]
+        if changed:
+            late_distances.append(_gene_distance(original.genes[changed[0]], mutated.genes[changed[0]]))
+
+    avg_early = sum(early_distances) / len(early_distances) if early_distances else 0
+    avg_late = sum(late_distances) / len(late_distances) if late_distances else 0
+    assert avg_early > avg_late
+
+
+def test_non_uniform_late_small_delta():
+    random.seed(20)
+    mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
+    original = _make_individual(10)
+
+    for _ in range(100):
+        mutated = mutation.mutate(original.copy(), generation=1000, max_generations=1000)
+        for i in range(10):
+            g_orig = original.genes[i]
+            g_mut = mutated.genes[i]
+            assert abs(g_orig.x1 - g_mut.x1) < 0.01
+            assert abs(g_orig.y1 - g_mut.y1) < 0.01
+            assert abs(g_orig.x2 - g_mut.x2) < 0.01
+            assert abs(g_orig.y2 - g_mut.y2) < 0.01
+            assert abs(g_orig.x3 - g_mut.x3) < 0.01
+            assert abs(g_orig.y3 - g_mut.y3) < 0.01
+            assert abs(g_orig.r - g_mut.r) < 3
+            assert abs(g_orig.g - g_mut.g) < 3
+            assert abs(g_orig.b - g_mut.b) < 3
+
+
+def test_non_uniform_never_degenerate():
+    random.seed(30)
+    mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
+    original = _make_individual(10)
+
+    for t in [0, 500, 1000]:
+        for _ in range(333):
+            mutated = mutation.mutate(original.copy(), generation=t, max_generations=1000)
+            for gene in mutated.genes:
+                assert 0.0 <= gene.x1 <= 1.0
+                assert 0.0 <= gene.y1 <= 1.0
+                assert 0.0 <= gene.x2 <= 1.0
+                assert 0.0 <= gene.y2 <= 1.0
+                assert 0.0 <= gene.x3 <= 1.0
+                assert 0.0 <= gene.y3 <= 1.0
+                assert 0 <= gene.r <= 255
+                assert 0 <= gene.g <= 255
+                assert 0 <= gene.b <= 255
+                assert 0.0 <= gene.a <= 1.0
