@@ -5,6 +5,7 @@ import time
 import numpy as np
 
 from config.config_loader import Config
+from core.ga_result import GAResult
 from core.metrics_collector import MetricsCollector
 from crossover.crossover_operator import CrossoverOperator
 from fitness.fitness_function import FitnessFunction
@@ -40,8 +41,8 @@ class GeneticAlgorithm:
         self.mutation_ops = mutation_ops
         self.survival = survival
 
-    def run(self) -> Population:
-        """Ejecuta el ciclo evolutivo completo y retorna la poblacion final."""
+    def run(self) -> GAResult:
+        """Ejecuta el ciclo evolutivo completo y retorna un GAResult."""
         config = self.config
         height, width = self.target_image.shape[0], self.target_image.shape[1]
 
@@ -75,9 +76,20 @@ class GeneticAlgorithm:
 
         stop_reason: str | None = None
         last_generation = 0
+        best_fitness_history: list[float] = [population.best.fitness]
+        low_diversity_counter = 0
 
         for generation in range(1, config.max_generations + 1):
             generation_start = time.time()
+
+            # Criterio: tiempo maximo
+            if config.max_seconds > 0:
+                elapsed = time.time() - start_time
+                if elapsed >= config.max_seconds:
+                    stop_reason = "tiempo_maximo"
+                    last_generation = generation - 1
+                    break
+
             parents = self.selection.select(population, k_offspring, generation=generation)
             crossover_op = random.choice(self.crossover_ops)
             mutation_op = random.choice(self.mutation_ops)
@@ -106,6 +118,8 @@ class GeneticAlgorithm:
 
             population = self.survival.apply(population, children, self.selection)
 
+            best_fitness_history.append(population.best.fitness)
+
             elapsed = time.time() - start_time
             collector.log_generation(generation, population, elapsed)
             collector.save_snapshot(generation, population.best)
@@ -122,18 +136,37 @@ class GeneticAlgorithm:
 
             last_generation = generation
 
-            if generation >= config.max_generations:
-                stop_reason = f"Maximo de generaciones alcanzado ({config.max_generations})"
-                break
+            # Criterio: fitness threshold
             if population.best.fitness >= config.fitness_threshold:
-                stop_reason = (
-                    "Fitness threshold alcanzado "
-                    f"({population.best.fitness:.4f} >= {config.fitness_threshold})"
-                )
+                stop_reason = "fitness_alcanzado"
+                break
+
+            # Criterio: contenido
+            if config.content_generations > 0 and len(best_fitness_history) >= config.content_generations:
+                recent = best_fitness_history[-config.content_generations:]
+                if max(recent) - min(recent) < config.content_threshold:
+                    stop_reason = "contenido"
+                    break
+
+            # Criterio: estructura
+            if config.structure_generations > 0:
+                if population.fitness_std < config.structure_threshold:
+                    low_diversity_counter += 1
+                else:
+                    low_diversity_counter = 0
+                if low_diversity_counter >= config.structure_generations:
+                    stop_reason = "estructura"
+                    break
+
+            # Criterio: generaciones maximas
+            if generation >= config.max_generations:
+                stop_reason = "generaciones_maximas"
                 break
 
         if stop_reason is None:
-            stop_reason = "Loop completado sin condicion de corte"
+            stop_reason = "generaciones_maximas"
+
+        elapsed_seconds = time.time() - start_time
 
         collector.save_final_result(population.best, config, last_generation)
         collector.save_final_image(population.best)
@@ -144,4 +177,10 @@ class GeneticAlgorithm:
         logger.info("Fitness promedio final: %.4f", population.average_fitness)
         logger.info("Desviacion estandar final: %.4f", population.fitness_std)
 
-        return population
+        return GAResult(
+            best_individual=population.best,
+            final_generation=last_generation,
+            stop_reason=stop_reason,
+            elapsed_seconds=elapsed_seconds,
+            best_fitness_history=best_fitness_history,
+        )

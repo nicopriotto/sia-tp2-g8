@@ -39,10 +39,10 @@ def run_from_paths(image_path: str, config_path: str):
         survival=survival,
     )
 
-    population = ga.run()
+    result = ga.run()
 
     logging.info("Output guardado en output/final.png y output/triangles.json")
-    return population
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

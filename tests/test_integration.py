@@ -117,9 +117,9 @@ def test_fitness_increases_over_generations(monkeypatch):
         survival=survival,
     )
 
-    final_population = ga.run()
+    result = ga.run()
 
-    assert final_population.best.fitness > initial_best
+    assert result.best_individual.fitness > initial_best
 
 
 def test_output_files_created(tmp_path, monkeypatch):
