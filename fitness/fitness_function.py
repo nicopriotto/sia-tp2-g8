@@ -5,6 +5,8 @@ import numpy as np
 class FitnessFunction(ABC):
     """Clase base abstracta para funciones de fitness."""
 
+    name: str  # "mse" o "mae", usado por GPURenderer
+
     @abstractmethod
     def compute(self, generated: np.ndarray, target: np.ndarray) -> float:
         """

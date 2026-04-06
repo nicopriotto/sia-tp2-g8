@@ -5,6 +5,8 @@ from fitness.fitness_function import FitnessFunction
 class MSEFitness(FitnessFunction):
     """Funcion de fitness basada en Mean Squared Error (MSE)."""
 
+    name = "mse"
+
     def compute(self, generated: np.ndarray, target: np.ndarray) -> float:
         """
         Calcula fitness como 1 / (1 + MSE) sobre los canales RGB.

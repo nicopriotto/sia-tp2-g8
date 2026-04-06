@@ -64,9 +64,17 @@ class Individual:
         """
         if self.fitness_valid:
             return
-        height, width = target.shape[0], target.shape[1]
-        generated = renderer.render(self.genes, width, height, gene_type=self.gene_type)
-        self.fitness = fitness_fn.compute(generated, target)
+        # Intentar path GPU (render + fitness en shaders, sin readback)
+        gpu_fitness = renderer.compute_fitness(
+            self.genes, fitness_type=fitness_fn.name, gene_type=self.gene_type
+        )
+        if gpu_fitness is not None:
+            self.fitness = gpu_fitness
+        else:
+            # Path CPU: render + fitness por separado
+            height, width = target.shape[0], target.shape[1]
+            generated = renderer.render(self.genes, width, height, gene_type=self.gene_type)
+            self.fitness = fitness_fn.compute(generated, target)
         self.fitness_valid = True
 
     def to_dict(self) -> dict:
