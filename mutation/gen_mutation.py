@@ -15,4 +15,5 @@ class GenMutation(MutationOperator):
         if random.random() < self.mutation_rate:
             index = random.randint(0, len(individual.genes) - 1)
             individual.genes[index] = individual.genes[index].mutate_replace()
+            individual.fitness_valid = False
         return individual

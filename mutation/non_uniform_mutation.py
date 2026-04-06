@@ -20,5 +20,6 @@ class NonUniformMutation(MutationOperator):
 
             idx = random.randint(0, len(mutated.genes) - 1)
             mutated.genes[idx] = mutated.genes[idx].mutate_delta(strength)
+            mutated.fitness_valid = False
 
         return mutated

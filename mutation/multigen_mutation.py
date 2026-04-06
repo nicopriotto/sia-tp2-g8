@@ -19,5 +19,6 @@ class MultiGenMutation(MutationOperator):
             indices = random.sample(range(n_genes), k)
             for i in indices:
                 mutated.genes[i] = mutated.genes[i].mutate_replace()
+            mutated.fitness_valid = False
 
         return mutated

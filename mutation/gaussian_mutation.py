@@ -22,9 +22,15 @@ class GaussianMutation(MutationOperator):
         Por cada gen, con probabilidad mutation_rate, aplica mutate_gaussian(sigma).
         """
         new_genes = []
+        changed = False
         for gene in individual.genes:
             if random.random() < self.mutation_rate:
                 new_genes.append(gene.mutate_gaussian(self.sigma))
+                changed = True
             else:
                 new_genes.append(gene.copy())
-        return Individual(genes=new_genes)
+        result = Individual(genes=new_genes)
+        if not changed:
+            result.fitness = individual.fitness
+            result.fitness_valid = individual.fitness_valid
+        return result

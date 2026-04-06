@@ -22,6 +22,7 @@ class Individual:
     """
     genes: list[Gene]
     fitness: float = 0.0
+    fitness_valid: bool = False
 
     @classmethod
     def random(cls, n_triangles: int, gene_type: str = "triangle") -> "Individual":
@@ -45,7 +46,7 @@ class Individual:
         El fitness se copia tal cual.
         """
         copied_genes = [gene.copy() for gene in self.genes]
-        return Individual(genes=copied_genes, fitness=self.fitness)
+        return Individual(genes=copied_genes, fitness=self.fitness, fitness_valid=self.fitness_valid)
 
     def compute_fitness(
         self,
@@ -63,9 +64,12 @@ class Individual:
         Efecto secundario:
             Actualiza self.fitness con el valor calculado.
         """
+        if self.fitness_valid:
+            return
         height, width = target.shape[0], target.shape[1]
         generated = renderer.render(self.genes, width, height)
         self.fitness = fitness_fn.compute(generated, target)
+        self.fitness_valid = True
 
     def to_dict(self) -> dict:
         """Serializa el individuo a un diccionario.

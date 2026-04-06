@@ -10,7 +10,11 @@ class UniformMutation(MutationOperator):
 
     def mutate(self, individual: Individual, generation: int, max_generations: int) -> Individual:
         mutated = individual.copy()
+        changed = False
         for i in range(len(mutated.genes)):
             if random.random() < self.mutation_rate:
                 mutated.genes[i] = mutated.genes[i].mutate_replace()
+                changed = True
+        if changed:
+            mutated.fitness_valid = False
         return mutated

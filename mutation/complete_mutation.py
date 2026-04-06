@@ -13,4 +13,5 @@ class CompleteMutation(MutationOperator):
         if random.random() < self.mutation_rate:
             for i in range(len(mutated.genes)):
                 mutated.genes[i] = mutated.genes[i].mutate_replace()
+            mutated.fitness_valid = False
         return mutated
