@@ -38,6 +38,7 @@ from survival.exclusive import ExclusiveSurvival
 from fitness.mse import MSEFitness
 from fitness.mae import MAEFitness
 from fitness.gmsd import GMSDFitness
+from fitness.oklab import OklabMSEFitness
 
 
 SELECTIONS = {
@@ -76,6 +77,7 @@ FITNESS = {
     "MSE": MSEFitness,
     "MAE": MAEFitness,
     "GMSD": GMSDFitness,
+    "Oklab": OklabMSEFitness,
 }
 
 
