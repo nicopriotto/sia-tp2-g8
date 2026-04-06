@@ -227,6 +227,11 @@ class GPURenderer(Renderer):
             fragment_shader=_read("reduce.frag"),
         )
 
+        self.fitness_ssim_program = self.ctx.program(
+            vertex_shader=fullscreen_vert,
+            fragment_shader=_read("fitness_ssim.frag"),
+        )
+
         quad_vertices = np.array([
             -1.0, -1.0,
              1.0, -1.0,
@@ -252,6 +257,20 @@ class GPURenderer(Renderer):
             (self.width, self.height), 4, dtype='f4',
         )
         self.error_fbo = self.ctx.framebuffer(color_attachments=[self.error_texture])
+
+        # Pipeline SSIM: textura de bloques (W/8, H/8) + reduccion propia
+        self.ssim_block_size = 8
+        ssim_w = max(1, self.width // self.ssim_block_size)
+        ssim_h = max(1, self.height // self.ssim_block_size)
+        self.ssim_texture = self.ctx.texture((ssim_w, ssim_h), 4, dtype='f4')
+        self.ssim_fbo = self.ctx.framebuffer(color_attachments=[self.ssim_texture])
+        self.ssim_reduction_levels = []
+        sw, sh = ssim_w, ssim_h
+        while sw > 1 or sh > 1:
+            sw, sh = max(1, sw // 2), max(1, sh // 2)
+            tex = self.ctx.texture((sw, sh), 4, dtype='f4')
+            fbo = self.ctx.framebuffer(color_attachments=[tex])
+            self.ssim_reduction_levels.append((tex, fbo, sw, sh))
 
     def render(self, genes: np.ndarray, width: int = None, height: int = None, gene_type: str = "triangle") -> np.ndarray:
         """
@@ -307,10 +326,14 @@ class GPURenderer(Renderer):
         Returns:
             Fitness en rango (0, 1].
         """
-        # Paso 0: Renderizar triangulos
         self.render(genes, gene_type=gene_type)
 
-        # Paso 1: Calcular error por pixel
+        if fitness_type == "ssim":
+            return self._compute_fitness_ssim()
+        return self._compute_fitness_error(fitness_type)
+
+    def _compute_fitness_error(self, fitness_type: str) -> float:
+        """Pipeline MSE/MAE: error por pixel → reduccion → 1/(1+error)."""
         self.error_fbo.use()
         self.ctx.viewport = (0, 0, self.width, self.height)
         self.ctx.clear(0.0, 0.0, 0.0, 0.0)
@@ -329,9 +352,40 @@ class GPURenderer(Renderer):
         vao.render(mode=self.ctx.TRIANGLE_STRIP)
         vao.release()
 
-        # Paso 2: Reduccion iterativa
-        prev_texture = self.error_texture
-        for tex, fbo, w, h in self.reduction_levels:
+        mean_val = self._reduce(self.error_texture, self.reduction_levels)
+        fitness = 1.0 / (1.0 + mean_val)
+        return fitness
+
+    def _compute_fitness_ssim(self) -> float:
+        """Pipeline SSIM: estadisticas por bloque → reduccion → mean SSIM."""
+        ssim_w = max(1, self.width // self.ssim_block_size)
+        ssim_h = max(1, self.height // self.ssim_block_size)
+
+        self.ssim_fbo.use()
+        self.ctx.viewport = (0, 0, ssim_w, ssim_h)
+        self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+
+        self.render_texture.use(location=0)
+        self.target_texture.use(location=1)
+        self.fitness_ssim_program['u_generated'].value = 0
+        self.fitness_ssim_program['u_target'].value = 1
+        self.fitness_ssim_program['u_image_size'].value = (self.width, self.height)
+        self.fitness_ssim_program['u_block_size'].value = self.ssim_block_size
+
+        vao = self.ctx.vertex_array(
+            self.fitness_ssim_program,
+            [(self.quad_vbo, '2f', 'in_position')],
+        )
+        vao.render(mode=self.ctx.TRIANGLE_STRIP)
+        vao.release()
+
+        mean_ssim = self._reduce(self.ssim_texture, self.ssim_reduction_levels)
+        return float(np.clip(mean_ssim, 0.0, 1.0))
+
+    def _reduce(self, source_texture, reduction_levels) -> float:
+        """Reduccion iterativa 2x2 hasta 1x1. Retorna media de canales RGB."""
+        prev_texture = source_texture
+        for tex, fbo, w, h in reduction_levels:
             fbo.use()
             self.ctx.viewport = (0, 0, w, h)
             self.ctx.clear(0.0, 0.0, 0.0, 0.0)
@@ -352,17 +406,12 @@ class GPURenderer(Renderer):
 
             prev_texture = tex
 
-        # Restaurar viewport
         self.ctx.viewport = (0, 0, self.width, self.height)
 
-        # Paso 3: Leer el pixel 1x1 final
-        _, last_fbo, _, _ = self.reduction_levels[-1]
+        _, last_fbo, _, _ = reduction_levels[-1]
         raw = last_fbo.read(components=4, dtype='f4')
-        error_rgba = np.frombuffer(raw, dtype=np.float32)
-
-        mean_error = float(np.mean(error_rgba[:3]))
-        fitness = 1.0 / (1.0 + mean_error)
-        return fitness
+        rgba = np.frombuffer(raw, dtype=np.float32)
+        return float(np.mean(rgba[:3]))
 
     @staticmethod
     def detect_device(preference: str = "auto") -> str:
@@ -385,10 +434,16 @@ class GPURenderer(Renderer):
         for tex, fbo, _, _ in self.reduction_levels:
             tex.release()
             fbo.release()
+        self.ssim_texture.release()
+        self.ssim_fbo.release()
+        for tex, fbo, _, _ in self.ssim_reduction_levels:
+            tex.release()
+            fbo.release()
         self.quad_vbo.release()
         self.triangle_program.release()
         self.fitness_mse_program.release()
         self.fitness_mae_program.release()
+        self.fitness_ssim_program.release()
         self.reduce_program.release()
         self.ctx.release()
         logger.info("GPURenderer: recursos liberados")
