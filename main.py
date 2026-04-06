@@ -39,6 +39,7 @@ from fitness.mse import MSEFitness
 from fitness.mae import MAEFitness
 from fitness.gmsd import GMSDFitness
 from fitness.oklab import OklabMSEFitness
+from fitness.msssim import MSSSIMFitness
 
 
 SELECTIONS = {
@@ -78,6 +79,7 @@ FITNESS = {
     "MAE": MAEFitness,
     "GMSD": GMSDFitness,
     "Oklab": OklabMSEFitness,
+    "MSSSIM": MSSSIMFitness,
 }
 
 

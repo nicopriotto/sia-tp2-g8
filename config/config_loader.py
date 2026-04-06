@@ -13,7 +13,7 @@ VALID_MUTATION_METHODS = ["Gen", "MultiGen", "Uniforme", "Completa", "NoUniforme
 
 VALID_SURVIVAL_STRATEGIES = ["Aditiva", "Exclusiva"]
 
-VALID_FITNESS_FUNCTIONS = ["MSE", "MAE", "GMSD", "Oklab"]
+VALID_FITNESS_FUNCTIONS = ["MSE", "MAE", "GMSD", "Oklab", "MSSSIM"]
 
 
 @dataclass
