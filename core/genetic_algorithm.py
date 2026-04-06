@@ -143,8 +143,14 @@ class GeneticAlgorithm:
                 last_child = mutation_op.mutate(last_child, generation, config.max_generations)
                 children.append(last_child)
 
-            for child in children:
-                child.compute_fitness(self.target_image, self.renderer, self.fitness_fn)
+            # Evaluar hijos: batch GPU si disponible, sino uno por uno
+            if hasattr(self.renderer, 'evaluate_batch'):
+                fitnesses = self.renderer.evaluate_batch(children)
+                for child, fit in zip(children, fitnesses):
+                    child.fitness = fit
+            else:
+                for child in children:
+                    child.compute_fitness(self.target_image, self.renderer, self.fitness_fn)
 
             population = self.survival.apply(population, children, selector)
 

@@ -75,5 +75,11 @@ class Population:
             renderer: Instancia de Renderer para convertir genes a imagen.
             fitness_fn: Instancia de FitnessFunction para calcular similitud.
         """
-        for individual in self.individuals:
-            individual.compute_fitness(target, renderer, fitness_fn)
+        # Si el renderer soporta batch GPU, evaluar todos de una sola vez
+        if hasattr(renderer, 'evaluate_batch'):
+            fitnesses = renderer.evaluate_batch(self.individuals)
+            for ind, fit in zip(self.individuals, fitnesses):
+                ind.fitness = fit
+        else:
+            for individual in self.individuals:
+                individual.compute_fitness(target, renderer, fitness_fn)
