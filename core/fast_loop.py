@@ -39,7 +39,9 @@ def _random_population(pop_size: int, n_genes: int, rng: np.random.Generator) ->
 
 def _elite_select(pop: np.ndarray, fitness: np.ndarray, k: int) -> np.ndarray:
     """Select k individuals by elite selection. Returns indices."""
-    sorted_idx = np.argsort(fitness)[::-1]  # descending
+    # Replace NaN with -inf so they sort to the bottom
+    safe_fitness = np.where(np.isfinite(fitness), fitness, -np.inf)
+    sorted_idx = np.argsort(safe_fitness)[::-1]  # descending
     n = len(fitness)
     if k <= n:
         return sorted_idx[:k]
@@ -54,10 +56,28 @@ def _boltzmann_select(pop: np.ndarray, fitness: np.ndarray, k: int,
                        rng: np.random.Generator) -> np.ndarray:
     """Boltzmann selection returning k indices."""
     temp = tc + (t0 - tc) * np.exp(-bk * generation)
-    temp = max(temp, 1e-6)
-    shifted = (fitness - np.max(fitness)) / temp
+    temp = max(temp, 0.01)
+
+    # Filter out NaN fitness values
+    valid_mask = np.isfinite(fitness)
+    if not np.any(valid_mask):
+        # All NaN — return random indices
+        return rng.integers(0, len(fitness), size=k)
+
+    shifted = (fitness - np.nanmax(fitness)) / temp
+    # Clamp to prevent overflow in exp
+    shifted = np.clip(shifted, -500, 0)
     exp_vals = np.exp(shifted)
-    probs = exp_vals / np.sum(exp_vals)
+
+    # Replace NaN/inf with 0
+    exp_vals = np.where(np.isfinite(exp_vals), exp_vals, 0.0)
+
+    total = np.sum(exp_vals)
+    if total <= 0:
+        # Uniform fallback
+        return rng.integers(0, len(fitness), size=k)
+
+    probs = exp_vals / total
     return rng.choice(len(fitness), size=k, p=probs)
 
 
@@ -248,6 +268,7 @@ def run_fast(
     # Initialize population as numpy array
     pop = _random_population(pop_size, n_genes, rng)
     fitness = np.array(renderer.evaluate_batch_raw(pop), dtype=np.float32)
+    fitness = np.where(np.isfinite(fitness), fitness, 0.0)
 
     best_idx = np.argmax(fitness)
     best_fitness = fitness[best_idx]
@@ -327,8 +348,15 @@ def run_fast(
         else:  # Gen, default
             children = _mutate_gen(children, mutation_rate, rng)
 
+        # Clamp gene values to valid ranges before evaluation
+        children[:, :, 0:6] = np.clip(children[:, :, 0:6], 0.0, 1.0)
+        children[:, :, 6:9] = np.clip(children[:, :, 6:9], 0.0, 255.0)
+        children[:, :, 9] = np.clip(children[:, :, 9], 0.0, 1.0)
+
         # Evaluate children fitness on GPU
         children_fitness = np.array(renderer.evaluate_batch_raw(children), dtype=np.float32)
+        # Replace any NaN from GPU with 0 (prevents contamination)
+        children_fitness = np.where(np.isfinite(children_fitness), children_fitness, 0.0)
 
         # Survival: combine and select best N
         combined_pop = np.concatenate([pop, children], axis=0)
