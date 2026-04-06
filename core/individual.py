@@ -63,9 +63,13 @@ class Individual:
         Efecto secundario:
             Actualiza self.fitness con el valor calculado.
         """
-        height, width = target.shape[0], target.shape[1]
-        generated = renderer.render(self.genes, width, height)
-        self.fitness = fitness_fn.compute(generated, target)
+        # Si el renderer soporta fitness en GPU, usarlo (evita copiar a CPU)
+        if hasattr(renderer, 'compute_fitness_gpu'):
+            self.fitness = renderer.compute_fitness_gpu(self.genes)
+        else:
+            height, width = target.shape[0], target.shape[1]
+            generated = renderer.render(self.genes, width, height)
+            self.fitness = fitness_fn.compute(generated, target)
 
     def to_dict(self) -> dict:
         """Serializa el individuo a un diccionario.

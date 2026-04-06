@@ -151,14 +151,21 @@ def build_operators(config: Config):
 def create_renderer(config: Config, target_image: np.ndarray, width: int, height: int):
     """Crea el renderer apropiado segun la configuracion y disponibilidad."""
     if config.use_gpu:
+        # Intentar CUDA (CuPy) primero — funciona con GPUs NVIDIA (T4, etc.)
+        from render.cuda_renderer import CUDARenderer, cuda_available
+        if cuda_available():
+            logger.info("Usando renderer CUDA (CuPy)")
+            return CUDARenderer(width, height, target_image)
+
+        # Fallback a OpenGL (ModernGL)
         from render.gpu_renderer import GPURenderer, gpu_available
         if gpu_available():
             device_info = GPURenderer.detect_device(config.gpu_device)
-            logger.info("Usando renderer GPU: %s", device_info)
+            logger.info("Usando renderer GPU OpenGL: %s", device_info)
             return GPURenderer(width, height, target_image)
-        else:
-            logger.warning("GPU solicitada pero no disponible. Fallback a CPU.")
-            return CPURenderer()
+
+        logger.warning("GPU solicitada pero no disponible. Fallback a CPU.")
+        return CPURenderer()
     else:
         return CPURenderer()
 
