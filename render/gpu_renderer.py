@@ -8,11 +8,22 @@ from render.renderer import Renderer
 logger = logging.getLogger(__name__)
 
 
+def _ctx_kwargs() -> dict:
+    """Retorna kwargs para create_standalone_context segun el entorno."""
+    backend = os.environ.get("MODERNGL_BACKEND")
+    if backend:
+        return {"backend": backend}
+    # Autodetectar: si no hay display (servidor/Colab), intentar EGL
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        return {"backend": "egl"}
+    return {}
+
+
 def gpu_available() -> bool:
     """Retorna True si ModernGL esta instalado y puede crear un contexto offscreen."""
     try:
         import moderngl
-        ctx = moderngl.create_standalone_context()
+        ctx = moderngl.create_standalone_context(**_ctx_kwargs())
         ctx.release()
         return True
     except Exception:
@@ -30,7 +41,7 @@ class GPURenderer(Renderer):
 
         self.width = width
         self.height = height
-        self.ctx = moderngl.create_standalone_context()
+        self.ctx = moderngl.create_standalone_context(**_ctx_kwargs())
 
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = (
@@ -237,7 +248,7 @@ class GPURenderer(Renderer):
         """Detecta el dispositivo GPU disponible."""
         try:
             import moderngl
-            ctx = moderngl.create_standalone_context()
+            ctx = moderngl.create_standalone_context(**_ctx_kwargs())
             info = ctx.info
             vendor = info.get("GL_VENDOR", "").lower()
             renderer_name = info.get("GL_RENDERER", "").lower()
