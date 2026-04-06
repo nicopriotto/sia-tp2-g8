@@ -49,6 +49,8 @@ class Config:
     gene_type: str = "triangle"  # "triangle" | "ellipse"
     arithmetic_alpha: float = 0.5   # Factor de interpolacion para ArithmeticCrossover
     gaussian_sigma: float = 0.1     # Sigma para GaussianMutation
+    adaptive_operator_weights: bool = False
+    adaptive_operator_delta: float = 0.05
     # Campos para seleccion ponderada de operadores
     selection_methods: list[str] = field(default_factory=list)
     selection_weights: list[float] = field(default_factory=list)
@@ -146,6 +148,8 @@ def load_config(path: str) -> Config:
         gene_type=data.get("gene_type", "triangle"),
         arithmetic_alpha=data.get("arithmetic_alpha", 0.5),
         gaussian_sigma=data.get("gaussian_sigma", 0.1),
+        adaptive_operator_weights=data.get("adaptive_operator_weights", False),
+        adaptive_operator_delta=data.get("adaptive_operator_delta", 0.05),
         selection_methods=sel_names,
         selection_weights=sel_weights,
         crossover_weights=cx_weights,
@@ -200,6 +204,11 @@ def _validate_config(config: Config) -> None:
     if not (0.0 <= config.generational_gap <= 1.0):
         raise ValueError(
             f"generational_gap debe estar en [0, 1], recibido: {config.generational_gap}"
+        )
+
+    if config.adaptive_operator_delta <= 0:
+        raise ValueError(
+            f"adaptive_operator_delta debe ser > 0, recibido: {config.adaptive_operator_delta}"
         )
 
     if config.gpu_device not in ("auto", "dedicated", "integrated"):

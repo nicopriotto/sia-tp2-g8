@@ -127,10 +127,9 @@ def _make_weighted_config(**overrides) -> Config:
     return Config(**base)
 
 
-def _run_weighted_ga(tmp_path, monkeypatch, config: Config):
-    """Helper: ejecuta un GA completo con operadores ponderados."""
-    monkeypatch.chdir(tmp_path)
-    target = np.random.rand(10, 10, 4).astype(np.float32)
+def _make_ga(config: Config, target: np.ndarray | None = None):
+    """Helper: construye un GA listo para ejecutar."""
+    target = target if target is not None else np.random.rand(10, 10, 4).astype(np.float32)
     renderer = CPURenderer()
 
     selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
@@ -147,7 +146,69 @@ def _run_weighted_ga(tmp_path, monkeypatch, config: Config):
         survival=survival,
         context=context,
     )
+    return ga
+
+
+def _run_weighted_ga(tmp_path, monkeypatch, config: Config):
+    """Helper: ejecuta un GA completo con operadores ponderados."""
+    monkeypatch.chdir(tmp_path)
+    ga = _make_ga(config)
     return ga.run()
+
+
+def test_static_weights_mode_preserves_config_weights():
+    config = _make_weighted_config(
+        selection_methods=["Elite", "Ruleta"],
+        selection_weights=[0.8, 0.2],
+        mutation_methods=["Gen", "Completa"],
+        mutation_weights=[0.7, 0.3],
+    )
+    ga = _make_ga(config)
+    assert ga.selection_weights == [0.8, 0.2]
+    assert ga.mutation_weights == [0.7, 0.3]
+
+
+def test_adaptive_weights_start_uniform_even_if_config_has_custom_weights():
+    config = _make_weighted_config(
+        selection_methods=["Elite", "Ruleta"],
+        selection_weights=[0.9, 0.1],
+        mutation_methods=["Gen", "Completa"],
+        mutation_weights=[0.8, 0.2],
+        adaptive_operator_weights=True,
+    )
+    ga = _make_ga(config)
+    assert ga.selection_weights == [0.5, 0.5]
+    assert ga.mutation_weights == [0.5, 0.5]
+
+
+def test_adaptive_weight_update_rewards_used_operator():
+    updated = GeneticAlgorithm._update_weights([0.5, 0.5], chosen_index=0, improved=True, delta=0.05)
+    assert updated[0] > 0.5
+    assert updated[1] < 0.5
+    assert abs(sum(updated) - 1.0) < 1e-9
+
+
+def test_adaptive_weight_update_penalizes_used_operator():
+    updated = GeneticAlgorithm._update_weights([0.5, 0.5], chosen_index=0, improved=False, delta=0.05)
+    assert updated[0] < 0.5
+    assert updated[1] > 0.5
+    assert abs(sum(updated) - 1.0) < 1e-9
+
+
+def test_adaptive_weight_update_applies_minimum_floor():
+    updated = GeneticAlgorithm._update_weights(
+        [GeneticAlgorithm._MIN_ADAPTIVE_WEIGHT, 1.0 - GeneticAlgorithm._MIN_ADAPTIVE_WEIGHT],
+        chosen_index=0,
+        improved=False,
+        delta=0.05,
+    )
+    assert updated[0] >= GeneticAlgorithm._MIN_ADAPTIVE_WEIGHT
+    assert abs(sum(updated) - 1.0) < 1e-9
+
+
+def test_adaptive_weight_update_single_operator_stays_fixed():
+    updated = GeneticAlgorithm._update_weights([1.0], chosen_index=0, improved=False, delta=0.05)
+    assert updated == [1.0]
 
 
 def test_weighted_selection_runs(tmp_path, monkeypatch):
@@ -179,3 +240,37 @@ def test_weighted_mutation_runs(tmp_path, monkeypatch):
     )
     result = _run_weighted_ga(tmp_path, monkeypatch, config)
     assert result.best_individual is not None
+
+
+def test_adaptive_weights_run_and_return_history(tmp_path, monkeypatch):
+    config = _make_weighted_config(
+        selection_methods=["Elite", "Ruleta"],
+        selection_weights=[0.8, 0.2],
+        mutation_methods=["Gen", "Completa"],
+        mutation_weights=[0.9, 0.1],
+        adaptive_operator_weights=True,
+    )
+    result = _run_weighted_ga(tmp_path, monkeypatch, config)
+
+    assert result.best_individual is not None
+    assert len(result.selection_weight_history) == result.final_generation + 1
+    assert len(result.mutation_weight_history) == result.final_generation + 1
+    assert result.selection_weight_history[0] == [0.5, 0.5]
+    assert result.mutation_weight_history[0] == [0.5, 0.5]
+    assert any(weights != [0.5, 0.5] for weights in result.selection_weight_history[1:])
+    assert any(weights != [0.5, 0.5] for weights in result.mutation_weight_history[1:])
+    assert all(abs(sum(weights) - 1.0) < 1e-9 for weights in result.selection_weight_history)
+    assert all(abs(sum(weights) - 1.0) < 1e-9 for weights in result.mutation_weight_history)
+
+
+def test_static_weights_run_returns_empty_histories(tmp_path, monkeypatch):
+    config = _make_weighted_config(
+        selection_methods=["Elite", "Ruleta"],
+        selection_weights=[0.6, 0.4],
+        mutation_methods=["Gen", "Completa"],
+        mutation_weights=[0.7, 0.3],
+        adaptive_operator_weights=False,
+    )
+    result = _run_weighted_ga(tmp_path, monkeypatch, config)
+    assert result.selection_weight_history == []
+    assert result.mutation_weight_history == []

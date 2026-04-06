@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 class GeneticAlgorithm:
     """Loop principal del algoritmo genetico."""
 
+    _MIN_ADAPTIVE_WEIGHT = 1e-3
+
     def __init__(
         self,
         config: Config,
@@ -60,15 +62,74 @@ class GeneticAlgorithm:
         from render.cpu_renderer import CPURenderer
         self._parallel = isinstance(renderer, CPURenderer)
 
+        self.adaptive_operator_weights = config.adaptive_operator_weights
+        self.adaptive_operator_delta = config.adaptive_operator_delta
+
         # Pesos para seleccion ponderada de operadores
         self.selection_weights = config.selection_weights if config.selection_weights else [1.0] * len(self.selection_ops)
         self.crossover_weights = config.crossover_weights if config.crossover_weights else [1.0] * len(self.crossover_ops)
         self.mutation_weights = config.mutation_weights if config.mutation_weights else [1.0] * len(self.mutation_ops)
 
+        if self.adaptive_operator_weights:
+            self.selection_weights = self._initial_weights(self.selection_ops)
+            self.mutation_weights = self._initial_weights(self.mutation_ops)
+
     @staticmethod
     def _choose_operator(operators: list, weights: list):
         """Elige un operador segun pesos ponderados."""
         return random.choices(operators, weights=weights, k=1)[0]
+
+    @staticmethod
+    def _choose_operator_indexed(operators: list, weights: list) -> tuple[int, object]:
+        """Elige un operador segun pesos ponderados y retorna tambien su indice."""
+        index = random.choices(range(len(operators)), weights=weights, k=1)[0]
+        return index, operators[index]
+
+    @staticmethod
+    def _uniform_weights(count: int) -> list[float]:
+        if count <= 0:
+            return []
+        return [1.0 / count] * count
+
+    @classmethod
+    def _normalize_weights(cls, weights: list[float], min_weight: float | None = None) -> list[float]:
+        if not weights:
+            return []
+
+        adjusted = list(weights)
+        if min_weight is not None:
+            adjusted = [max(min_weight, weight) for weight in adjusted]
+
+        total = sum(adjusted)
+        if total <= 0:
+            return cls._uniform_weights(len(adjusted))
+
+        return [weight / total for weight in adjusted]
+
+    @classmethod
+    def _initial_weights(cls, operators: list) -> list[float]:
+        if len(operators) <= 1:
+            return [1.0] * len(operators)
+        return cls._uniform_weights(len(operators))
+
+    @classmethod
+    def _update_weights(
+        cls,
+        weights: list[float],
+        chosen_index: int | None,
+        improved: bool,
+        delta: float,
+    ) -> list[float]:
+        if not weights or chosen_index is None:
+            return list(weights)
+
+        if len(weights) == 1:
+            return [1.0]
+
+        updated = list(weights)
+        change = delta if improved else -delta
+        updated[chosen_index] = updated[chosen_index] + change
+        return cls._normalize_weights(updated, min_weight=cls._MIN_ADAPTIVE_WEIGHT)
 
     def run(self) -> GAResult:
         """Ejecuta el ciclo evolutivo completo y retorna un GAResult."""
@@ -119,7 +180,13 @@ class GeneticAlgorithm:
         stop_reason: str | None = None
         last_generation = 0
         best_fitness_history: list[float] = [population.best.fitness]
+        selection_weight_history: list[list[float]] = []
+        mutation_weight_history: list[list[float]] = []
         low_diversity_counter = 0
+
+        if self.adaptive_operator_weights:
+            selection_weight_history.append(self.selection_weights.copy())
+            mutation_weight_history.append(self.mutation_weights.copy())
 
         for generation in range(1, config.max_generations + 1):
             generation_start = time.time()
@@ -135,10 +202,18 @@ class GeneticAlgorithm:
                     last_generation = generation - 1
                     break
 
-            selector = self._choose_operator(self.selection_ops, self.selection_weights)
+            previous_best_fitness = population.best.fitness
+
+            selection_index, selector = self._choose_operator_indexed(
+                self.selection_ops,
+                self.selection_weights,
+            )
             parents = selector.select(population, k_offspring, generation=generation)
             crossover_op = self._choose_operator(self.crossover_ops, self.crossover_weights)
-            mutation_op = self._choose_operator(self.mutation_ops, self.mutation_weights)
+            mutation_index, mutation_op = self._choose_operator_indexed(
+                self.mutation_ops,
+                self.mutation_weights,
+            )
 
             children = []
             for index in range(0, len(parents) - 1, 2):
@@ -166,6 +241,23 @@ class GeneticAlgorithm:
                     child.compute_fitness(target, renderer, fitness_fn)
 
             population = self.survival.apply(population, children, selector)
+
+            if self.adaptive_operator_weights:
+                improved = population.best.fitness > previous_best_fitness
+                self.selection_weights = self._update_weights(
+                    self.selection_weights,
+                    selection_index,
+                    improved,
+                    self.adaptive_operator_delta,
+                )
+                self.mutation_weights = self._update_weights(
+                    self.mutation_weights,
+                    mutation_index,
+                    improved,
+                    self.adaptive_operator_delta,
+                )
+                selection_weight_history.append(self.selection_weights.copy())
+                mutation_weight_history.append(self.mutation_weights.copy())
 
             best_fitness_history.append(population.best.fitness)
 
@@ -247,4 +339,6 @@ class GeneticAlgorithm:
             stop_reason=stop_reason,
             elapsed_seconds=elapsed_seconds,
             best_fitness_history=best_fitness_history,
+            selection_weight_history=selection_weight_history,
+            mutation_weight_history=mutation_weight_history,
         )

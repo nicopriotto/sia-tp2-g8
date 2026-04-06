@@ -61,3 +61,12 @@ def test_defaults_applied():
     assert config.tournament_threshold == 0.75
     assert config.generational_gap == 1.0
     assert config.max_seconds == 0.0
+    assert config.adaptive_operator_weights is False
+    assert config.adaptive_operator_delta == 0.05
+
+
+def test_invalid_adaptive_operator_delta():
+    data = {**VALID_DATA, "adaptive_operator_delta": 0.0}
+    path = _write_config(data)
+    with pytest.raises(ValueError, match="adaptive_operator_delta"):
+        load_config(path)

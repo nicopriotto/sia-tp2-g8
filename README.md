@@ -84,6 +84,8 @@ El archivo de configuracion es un JSON con los siguientes campos:
 | `gene_type` | str | "triangle" | "triangle", "ellipse" | Tipo de gen/figura geometrica |
 | `arithmetic_alpha` | float | 0.5 | [0, 1] | Factor de interpolacion para crossover aritmetico |
 | `gaussian_sigma` | float | 0.1 | > 0 | Desviacion estandar para mutacion gaussiana |
+| `adaptive_operator_weights` | bool | false | true/false | Activa pesos adaptativos para seleccion y mutacion |
+| `adaptive_operator_delta` | float | 0.05 | > 0 | Premio/castigo fijo por generacion para pesos adaptativos |
 | `selection_methods` | list | [] | ver metodos abajo | Metodos de seleccion con pesos opcionales |
 | `selection_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de metodos de seleccion |
 | `crossover_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de crossover |
@@ -117,6 +119,8 @@ Los campos de crossover, mutacion y seleccion soportan un formato con pesos para
 ```
 
 Si se usan strings simples, todos los operadores tienen peso uniforme.
+
+Si `adaptive_operator_weights` esta en `true`, la seleccion y la mutacion arrancan con probabilidad uniforme entre los metodos configurados. En cada generacion se compara el `best_fitness` nuevo contra el de la generacion anterior: si mejora, el metodo de seleccion y el de mutacion usados en esa generacion reciben un premio de `adaptive_operator_delta`; si no mejora, reciben un castigo del mismo valor. Luego los pesos se renormalizan para seguir sumando 1.0. El crossover no participa de esta logica adaptativa.
 
 ### Criterios de corte
 
