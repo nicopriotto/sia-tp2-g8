@@ -37,6 +37,7 @@ from survival.exclusive import ExclusiveSurvival
 
 from fitness.mse import MSEFitness
 from fitness.mae import MAEFitness
+from fitness.delta_e import DeltaEFitness
 
 
 SELECTIONS = {
@@ -74,6 +75,7 @@ SURVIVALS = {
 FITNESS = {
     "MSE": MSEFitness,
     "MAE": MAEFitness,
+    "DeltaE": DeltaEFitness,
 }
 
 
