@@ -135,34 +135,23 @@ class GPURenderer(Renderer):
         self.ctx.viewport = (0, 0, w, h)
         self.ctx.clear(1.0, 1.0, 1.0, 1.0)
 
-        for gene in genes:
-            # Saltar genes inactivos
-            if hasattr(gene, 'active') and not gene.active:
-                continue
+        active = [g for g in genes if isinstance(g, TriangleGene) and getattr(g, 'active', True)]
 
-            # Solo renderizar TriangleGene (GPU no soporta elipses)
-            if not isinstance(gene, TriangleGene):
-                continue
+        if active:
+            vertex_data = np.empty(len(active) * 3 * 6, dtype='f4')
+            idx = 0
+            for gene in active:
+                r, g, b, a = gene.r / 255.0, gene.g / 255.0, gene.b / 255.0, gene.a
+                vertex_data[idx:idx+6] = [gene.x1, gene.y1, r, g, b, a]
+                vertex_data[idx+6:idx+12] = [gene.x2, gene.y2, r, g, b, a]
+                vertex_data[idx+12:idx+18] = [gene.x3, gene.y3, r, g, b, a]
+                idx += 18
 
-            vertices = np.array([
-                gene.x1, gene.y1,
-                gene.x2, gene.y2,
-                gene.x3, gene.y3,
-            ], dtype='f4')
-
-            vbo = self.ctx.buffer(vertices)
+            vbo = self.ctx.buffer(vertex_data)
             vao = self.ctx.vertex_array(
                 self.triangle_program,
-                [(vbo, '2f', 'in_position')],
+                [(vbo, '2f 4f', 'in_position', 'in_color')],
             )
-
-            self.triangle_program['u_color'].value = (
-                gene.r / 255.0,
-                gene.g / 255.0,
-                gene.b / 255.0,
-                gene.a,
-            )
-
             vao.render(mode=self.ctx.TRIANGLES)
             vbo.release()
             vao.release()
