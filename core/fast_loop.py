@@ -195,7 +195,7 @@ def _array_to_individual(genes_array: np.ndarray) -> Individual:
             x3=float(row[4]), y3=float(row[5]),
             r=int(row[6]), g=int(row[7]), b=int(row[8]),
             a=float(row[9]),
-            active=row[10] > 0.5,
+            active=bool(row[10] > 0.5),
         ))
     return Individual(genes=genes, fitness=0.0)
 
