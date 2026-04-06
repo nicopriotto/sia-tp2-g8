@@ -179,30 +179,45 @@ def run_from_paths(image_path: str, config_path: str):
 
     height, width = target.shape[0], target.shape[1]
     renderer = create_renderer(config, target, width, height)
-    selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
 
-    context = GAContext(generation=0, max_generations=config.max_generations)
+    # Use fast numpy-based loop when CUDA renderer is available
+    if hasattr(renderer, 'evaluate_batch_raw'):
+        from core.fast_loop import run_fast
+        context = GAContext(generation=0, max_generations=config.max_generations)
+        logger.info("Usando fast loop (numpy arrays)")
+        result = run_fast(
+            config=config,
+            target_image=target,
+            renderer=renderer,
+            fitness_fn=None,  # Not needed, GPU computes fitness
+            output_dir="output",
+            context=context,
+        )
+    else:
+        selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
 
-    for sel in selection_ops:
-        if hasattr(sel, 'context'):
-            sel.context = context
-    for mut in mutation_ops:
-        if hasattr(mut, 'context'):
-            mut.context = context
+        context = GAContext(generation=0, max_generations=config.max_generations)
 
-    ga = GeneticAlgorithm(
-        config=config,
-        target_image=target,
-        renderer=renderer,
-        fitness_fn=fitness,
-        selection_ops=selection_ops,
-        crossover_ops=crossover_ops,
-        mutation_ops=mutation_ops,
-        survival=survival,
-        context=context,
-    )
+        for sel in selection_ops:
+            if hasattr(sel, 'context'):
+                sel.context = context
+        for mut in mutation_ops:
+            if hasattr(mut, 'context'):
+                mut.context = context
 
-    result = ga.run()
+        ga = GeneticAlgorithm(
+            config=config,
+            target_image=target,
+            renderer=renderer,
+            fitness_fn=fitness,
+            selection_ops=selection_ops,
+            crossover_ops=crossover_ops,
+            mutation_ops=mutation_ops,
+            survival=survival,
+            context=context,
+        )
+
+        result = ga.run()
 
     logging.info("Output guardado en output/final.png y output/triangles.json")
     return result

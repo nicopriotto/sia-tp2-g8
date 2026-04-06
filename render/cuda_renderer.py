@@ -409,6 +409,53 @@ class CUDARenderer(Renderer):
         mse = float(cp.mean(diff ** 2))
         return 1.0 / (1.0 + mse)
 
+    def evaluate_batch_raw(self, pop_array: np.ndarray) -> list[float]:
+        """Evalua fitness de una poblacion representada como array numpy (M, N, 11).
+
+        Skips gene packing entirely — the array is already in the right format.
+        This is the fast path used by core/fast_loop.py.
+        """
+        cp = self.cp
+        m, n_genes, _ = pop_array.shape
+        if m == 0:
+            return []
+
+        self._ensure_batch_buffers(m)
+
+        # Transfer directo: el array ya es float32 contiguo
+        genes_flat = np.ascontiguousarray(pop_array.reshape(-1), dtype=np.float32)
+        genes_gpu = cp.asarray(genes_flat)
+
+        batch_grid = (
+            (self.width + 15) // 16,
+            (self.height + 15) // 16,
+            m,
+        )
+
+        canvas_buf = self._batch_canvases_gpu[:m * self.height * self.width * 4]
+        errors_buf = self._batch_errors_gpu[:m * self._pixels_per_image]
+
+        self._batch_rasterize_kernel(
+            batch_grid, (16, 16, 1),
+            (genes_gpu, canvas_buf, np.int32(n_genes),
+             np.int32(self.width), np.int32(self.height), np.int32(m)),
+        )
+
+        total_pixels_all = m * self._pixels_per_image
+        mse_grid = ((total_pixels_all + 255) // 256,)
+
+        self._batch_mse_kernel(
+            mse_grid, (256,),
+            (canvas_buf, self._target_flat_gpu, errors_buf,
+             np.int32(self._pixels_per_image), np.int32(m)),
+        )
+
+        errors_reshaped = errors_buf[:total_pixels_all].reshape(m, self._pixels_per_image)
+        mse_values = cp.mean(errors_reshaped, axis=1)
+        fitness_values = 1.0 / (1.0 + mse_values)
+
+        return cp.asnumpy(fitness_values).tolist()
+
     def _genes_to_array(self, genes: list) -> np.ndarray:
         """Convierte lista de genes a array numpy [N, 11]."""
         n = len(genes)
