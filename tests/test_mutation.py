@@ -1,49 +1,33 @@
 import random
 
+import numpy as np
+
 from core.individual import Individual
 from genes.triangle_gene import TriangleGene
 from mutation.gen_mutation import GenMutation
 
 
-def _make_gene(value: int) -> TriangleGene:
-    return TriangleGene(
-        x1=0.01 * value,
-        y1=0.02 * value,
-        x2=0.03 * value,
-        y2=0.04 * value,
-        x3=0.05 * value,
-        y3=0.06 * value,
-        r=value,
-        g=value + 1,
-        b=value + 2,
-        a=min(1.0, 0.01 * value),
-    )
+def _make_gene_row(value: int) -> np.ndarray:
+    return np.array([
+        0.01 * value, 0.02 * value, 0.03 * value, 0.04 * value,
+        0.05 * value, 0.06 * value,
+        value, value + 1, value + 2,
+        min(1.0, 0.01 * value),
+        1.0,
+    ], dtype=np.float64)
 
 
 def _make_individual(size: int = 10) -> Individual:
-    return Individual(genes=[_make_gene(index + 1) for index in range(size)])
+    genes = np.array([_make_gene_row(i + 1) for i in range(size)])
+    return Individual(genes=genes, gene_type="triangle")
 
 
-def _gene_signature(gene: TriangleGene) -> tuple[float, float, float, float, float, float, int, int, int, float]:
-    return (
-        gene.x1,
-        gene.y1,
-        gene.x2,
-        gene.y2,
-        gene.x3,
-        gene.y3,
-        gene.r,
-        gene.g,
-        gene.b,
-        gene.a,
-    )
+def _gene_signature(row: np.ndarray) -> tuple:
+    return tuple(row[:10])
 
 
 def _changed_gene_count(before: Individual, after: Individual) -> int:
-    return sum(
-        _gene_signature(before_gene) != _gene_signature(after_gene)
-        for before_gene, after_gene in zip(before.genes, after.genes)
-    )
+    return int(np.sum(~np.all(np.isclose(before.genes[:, :10], after.genes[:, :10]), axis=1)))
 
 
 def test_gen_mutation_rate_zero():
@@ -139,6 +123,7 @@ from mutation.uniform_mutation import UniformMutation
 
 def test_uniform_mutation_rate_zero():
     random.seed(1)
+    np.random.seed(1)
     mutation = UniformMutation(mutation_rate=0.0)
     original = _make_individual(20)
 
@@ -149,6 +134,7 @@ def test_uniform_mutation_rate_zero():
 
 def test_uniform_mutation_rate_one():
     random.seed(2)
+    np.random.seed(2)
     mutation = UniformMutation(mutation_rate=1.0)
     original = _make_individual(20)
 
@@ -158,6 +144,7 @@ def test_uniform_mutation_rate_one():
 
 def test_uniform_mutation_independent():
     random.seed(3)
+    np.random.seed(3)
     mutation = UniformMutation(mutation_rate=0.5)
     original = _make_individual(10)
 
@@ -167,7 +154,7 @@ def test_uniform_mutation_independent():
     for _ in range(n_trials):
         mutated = mutation.mutate(original.copy(), generation=0, max_generations=100)
         for i in range(10):
-            if _gene_signature(original.genes[i]) != _gene_signature(mutated.genes[i]):
+            if not np.allclose(original.genes[i, :10], mutated.genes[i, :10]):
                 per_gene_count[i] += 1
 
     for i, count in enumerate(per_gene_count):
@@ -177,6 +164,7 @@ def test_uniform_mutation_independent():
 
 def test_uniform_mutation_approx_rate():
     random.seed(4)
+    np.random.seed(4)
     mutation = UniformMutation(mutation_rate=0.1)
     original = _make_individual(50)
 
@@ -241,13 +229,13 @@ def test_complete_mutation_approx_rate():
 from mutation.non_uniform_mutation import NonUniformMutation
 
 
-def _gene_distance(g1, g2) -> float:
+def _row_distance(r1: np.ndarray, r2: np.ndarray) -> float:
     """Promedio de diferencias absolutas en coordenadas y alpha."""
-    return (
-        abs(g1.x1 - g2.x1) + abs(g1.y1 - g2.y1) +
-        abs(g1.x2 - g2.x2) + abs(g1.y2 - g2.y2) +
-        abs(g1.x3 - g2.x3) + abs(g1.y3 - g2.y3) +
-        abs(g1.a - g2.a)
+    return float(
+        abs(r1[0] - r2[0]) + abs(r1[1] - r2[1]) +
+        abs(r1[2] - r2[2]) + abs(r1[3] - r2[3]) +
+        abs(r1[4] - r2[4]) + abs(r1[5] - r2[5]) +
+        abs(r1[9] - r2[9])
     ) / 7
 
 
@@ -267,22 +255,25 @@ def test_non_uniform_strength_decreases():
 
 def test_non_uniform_early_large_delta():
     random.seed(10)
+    np.random.seed(10)
     mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
     original = _make_individual(10)
 
     early_distances = []
     for _ in range(100):
         mutated = mutation.mutate(original.copy(), generation=0, max_generations=1000)
-        changed = [i for i in range(10) if _gene_signature(original.genes[i]) != _gene_signature(mutated.genes[i])]
-        if changed:
-            early_distances.append(_gene_distance(original.genes[changed[0]], mutated.genes[changed[0]]))
+        diffs = ~np.all(np.isclose(original.genes[:, :10], mutated.genes[:, :10]), axis=1)
+        changed = np.where(diffs)[0]
+        if len(changed) > 0:
+            early_distances.append(_row_distance(original.genes[changed[0]], mutated.genes[changed[0]]))
 
     late_distances = []
     for _ in range(100):
         mutated = mutation.mutate(original.copy(), generation=900, max_generations=1000)
-        changed = [i for i in range(10) if _gene_signature(original.genes[i]) != _gene_signature(mutated.genes[i])]
-        if changed:
-            late_distances.append(_gene_distance(original.genes[changed[0]], mutated.genes[changed[0]]))
+        diffs = ~np.all(np.isclose(original.genes[:, :10], mutated.genes[:, :10]), axis=1)
+        changed = np.where(diffs)[0]
+        if len(changed) > 0:
+            late_distances.append(_row_distance(original.genes[changed[0]], mutated.genes[changed[0]]))
 
     avg_early = sum(early_distances) / len(early_distances) if early_distances else 0
     avg_late = sum(late_distances) / len(late_distances) if late_distances else 0
@@ -291,41 +282,43 @@ def test_non_uniform_early_large_delta():
 
 def test_non_uniform_late_small_delta():
     random.seed(20)
+    np.random.seed(20)
     mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
     original = _make_individual(10)
 
     for _ in range(100):
         mutated = mutation.mutate(original.copy(), generation=1000, max_generations=1000)
         for i in range(10):
-            g_orig = original.genes[i]
-            g_mut = mutated.genes[i]
-            assert abs(g_orig.x1 - g_mut.x1) < 0.01
-            assert abs(g_orig.y1 - g_mut.y1) < 0.01
-            assert abs(g_orig.x2 - g_mut.x2) < 0.01
-            assert abs(g_orig.y2 - g_mut.y2) < 0.01
-            assert abs(g_orig.x3 - g_mut.x3) < 0.01
-            assert abs(g_orig.y3 - g_mut.y3) < 0.01
-            assert abs(g_orig.r - g_mut.r) < 3
-            assert abs(g_orig.g - g_mut.g) < 3
-            assert abs(g_orig.b - g_mut.b) < 3
+            o = original.genes[i]
+            m = mutated.genes[i]
+            assert abs(o[0] - m[0]) < 0.01  # x1
+            assert abs(o[1] - m[1]) < 0.01  # y1
+            assert abs(o[2] - m[2]) < 0.01  # x2
+            assert abs(o[3] - m[3]) < 0.01  # y2
+            assert abs(o[4] - m[4]) < 0.01  # x3
+            assert abs(o[5] - m[5]) < 0.01  # y3
+            assert abs(o[6] - m[6]) < 3     # r
+            assert abs(o[7] - m[7]) < 3     # g
+            assert abs(o[8] - m[8]) < 3     # b
 
 
 def test_non_uniform_never_degenerate():
     random.seed(30)
+    np.random.seed(30)
     mutation = NonUniformMutation(mutation_rate=1.0, b=5.0)
     original = _make_individual(10)
 
     for t in [0, 500, 1000]:
         for _ in range(333):
             mutated = mutation.mutate(original.copy(), generation=t, max_generations=1000)
-            for gene in mutated.genes:
-                assert 0.0 <= gene.x1 <= 1.0
-                assert 0.0 <= gene.y1 <= 1.0
-                assert 0.0 <= gene.x2 <= 1.0
-                assert 0.0 <= gene.y2 <= 1.0
-                assert 0.0 <= gene.x3 <= 1.0
-                assert 0.0 <= gene.y3 <= 1.0
-                assert 0 <= gene.r <= 255
-                assert 0 <= gene.g <= 255
-                assert 0 <= gene.b <= 255
-                assert 0.0 <= gene.a <= 1.0
+            for row in mutated.genes:
+                assert 0.0 <= row[0] <= 1.0
+                assert 0.0 <= row[1] <= 1.0
+                assert 0.0 <= row[2] <= 1.0
+                assert 0.0 <= row[3] <= 1.0
+                assert 0.0 <= row[4] <= 1.0
+                assert 0.0 <= row[5] <= 1.0
+                assert 0 <= row[6] <= 255
+                assert 0 <= row[7] <= 255
+                assert 0 <= row[8] <= 255
+                assert 0.0 <= row[9] <= 1.0

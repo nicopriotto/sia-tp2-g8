@@ -1,6 +1,7 @@
 import random
 
 from core.individual import Individual
+from genes import gene_layout
 from mutation.mutation_operator import MutationOperator
 
 
@@ -11,7 +12,7 @@ class CompleteMutation(MutationOperator):
     def mutate(self, individual: Individual, generation: int, max_generations: int) -> Individual:
         mutated = individual.copy()
         if random.random() < self.mutation_rate:
-            for i in range(len(mutated.genes)):
-                mutated.genes[i] = mutated.genes[i].mutate_replace()
+            n_genes = mutated.genes.shape[0]
+            mutated.genes = gene_layout.random_genes(mutated.gene_type, n_genes)
             mutated.fitness_valid = False
         return mutated

@@ -1,6 +1,7 @@
 import random
 
 from core.individual import Individual
+from genes import gene_layout
 from mutation.mutation_operator import MutationOperator
 
 
@@ -13,7 +14,7 @@ class GenMutation(MutationOperator):
     def mutate(self, individual: Individual, generation: int, max_generations: int) -> Individual:
         """Muta un solo gen con probabilidad mutation_rate."""
         if random.random() < self.mutation_rate:
-            index = random.randint(0, len(individual.genes) - 1)
-            individual.genes[index] = individual.genes[index].mutate_replace()
+            index = random.randint(0, individual.genes.shape[0] - 1)
+            individual.genes[index] = gene_layout.random_genes(individual.gene_type, 1)[0]
             individual.fitness_valid = False
         return individual

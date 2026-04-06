@@ -1,5 +1,8 @@
 import random
 from dataclasses import dataclass
+
+import numpy as np
+
 from genes.polygon_gene import PolygonGene
 
 
@@ -156,3 +159,23 @@ class TriangleGene(PolygonGene):
             "a": self.a,
             "active": self.active,
         }
+
+    def to_row(self) -> np.ndarray:
+        """Convierte a fila numpy (11,)."""
+        return np.array([
+            self.x1, self.y1, self.x2, self.y2, self.x3, self.y3,
+            float(self.r), float(self.g), float(self.b), self.a,
+            1.0 if self.active else 0.0,
+        ], dtype=np.float64)
+
+    @classmethod
+    def from_row(cls, row: np.ndarray) -> "TriangleGene":
+        """Crea un TriangleGene desde una fila numpy (11,)."""
+        return cls(
+            x1=float(row[0]), y1=float(row[1]),
+            x2=float(row[2]), y2=float(row[3]),
+            x3=float(row[4]), y3=float(row[5]),
+            r=int(row[6]), g=int(row[7]), b=int(row[8]),
+            a=float(row[9]),
+            active=bool(row[10] > 0.5),
+        )

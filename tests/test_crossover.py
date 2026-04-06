@@ -1,6 +1,8 @@
 import random
 from unittest.mock import patch
 
+import numpy as np
+
 from core.individual import Individual
 from crossover.annular import AnnularCrossover
 from crossover.one_point import OnePointCrossover
@@ -9,24 +11,19 @@ from crossover.uniform import UniformCrossover
 from genes.triangle_gene import TriangleGene
 
 
-def _make_gene(value: int) -> TriangleGene:
-    return TriangleGene(
-        x1=0.01 * value,
-        y1=0.02 * value,
-        x2=0.03 * value,
-        y2=0.04 * value,
-        x3=0.05 * value,
-        y3=0.06 * value,
-        r=value,
-        g=value + 1,
-        b=value + 2,
-        a=min(1.0, 0.1 * value),
-    )
+def _make_gene_row(value: int) -> np.ndarray:
+    return np.array([
+        0.01 * value, 0.02 * value, 0.03 * value, 0.04 * value,
+        0.05 * value, 0.06 * value,
+        value, value + 1, value + 2,
+        min(1.0, 0.1 * value),
+        1.0,
+    ], dtype=np.float64)
 
 
 def _make_parent(gene_values: list[int], fitness: float = 0.0) -> Individual:
-    genes = [_make_gene(value) for value in gene_values]
-    return Individual(genes=genes, fitness=fitness)
+    genes = np.array([_make_gene_row(v) for v in gene_values])
+    return Individual(genes=genes, gene_type="triangle", fitness=fitness)
 
 
 def test_one_point_child_length():
@@ -35,8 +32,8 @@ def test_one_point_child_length():
 
     child1, child2 = OnePointCrossover().crossover(parent1, parent2)
 
-    assert len(child1.genes) == len(parent1.genes)
-    assert len(child2.genes) == len(parent2.genes)
+    assert child1.genes.shape[0] == parent1.genes.shape[0]
+    assert child2.genes.shape[0] == parent2.genes.shape[0]
 
 
 def test_one_point_gene_origin():
@@ -45,15 +42,15 @@ def test_one_point_gene_origin():
     seed = 12345
 
     random.seed(seed)
-    cut_point = random.randint(0, len(parent1.genes) - 1)
+    cut_point = random.randint(0, parent1.genes.shape[0] - 1)
 
     random.seed(seed)
     child1, child2 = OnePointCrossover().crossover(parent1, parent2)
 
-    assert child1.genes[:cut_point] == parent1.genes[:cut_point]
-    assert child1.genes[cut_point:] == parent2.genes[cut_point:]
-    assert child2.genes[:cut_point] == parent2.genes[:cut_point]
-    assert child2.genes[cut_point:] == parent1.genes[cut_point:]
+    np.testing.assert_array_equal(child1.genes[:cut_point], parent1.genes[:cut_point])
+    np.testing.assert_array_equal(child1.genes[cut_point:], parent2.genes[cut_point:])
+    np.testing.assert_array_equal(child2.genes[:cut_point], parent2.genes[:cut_point])
+    np.testing.assert_array_equal(child2.genes[cut_point:], parent1.genes[cut_point:])
 
 
 def test_one_point_copy_independence():
@@ -61,14 +58,14 @@ def test_one_point_copy_independence():
     parent2 = _make_parent([11, 12, 13, 14])
 
     child1, _ = OnePointCrossover().crossover(parent1, parent2)
-    original_x1 = parent1.genes[0].x1
-    original_r = parent2.genes[0].r
+    original_x1 = parent1.genes[0, 0]
+    original_r = parent2.genes[0, 6]
 
-    child1.genes[0].x1 = 0.999
-    child1.genes[0].r = 255
+    child1.genes[0, 0] = 0.999
+    child1.genes[0, 6] = 255
 
-    assert parent1.genes[0].x1 == original_x1
-    assert parent2.genes[0].r == original_r
+    assert parent1.genes[0, 0] == original_x1
+    assert parent2.genes[0, 6] == original_r
 
 
 def test_one_point_fitness_zero():
@@ -87,8 +84,8 @@ def test_two_point_child_length():
 
     child1, child2 = TwoPointCrossover().crossover(parent1, parent2)
 
-    assert len(child1.genes) == 10
-    assert len(child2.genes) == 10
+    assert child1.genes.shape[0] == 10
+    assert child2.genes.shape[0] == 10
 
 
 def test_two_point_segment_swapped():
@@ -104,14 +101,12 @@ def test_two_point_segment_swapped():
     random.seed(seed)
     child1, child2 = TwoPointCrossover().crossover(parent1, parent2)
 
-    # Outside segment: child1 gets p1's genes, child2 gets p2's genes
     for i in list(range(0, p1)) + list(range(p2, 10)):
-        assert child1.genes[i].r == parent1.genes[i].r
-        assert child2.genes[i].r == parent2.genes[i].r
-    # Inside segment [p1:p2]: swapped
+        assert child1.genes[i, 6] == parent1.genes[i, 6]  # r
+        assert child2.genes[i, 6] == parent2.genes[i, 6]
     for i in range(p1, p2):
-        assert child1.genes[i].r == parent2.genes[i].r
-        assert child2.genes[i].r == parent1.genes[i].r
+        assert child1.genes[i, 6] == parent2.genes[i, 6]
+        assert child2.genes[i, 6] == parent1.genes[i, 6]
 
 
 def test_two_point_copy_independence():
@@ -119,35 +114,37 @@ def test_two_point_copy_independence():
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, _ = TwoPointCrossover().crossover(parent1, parent2)
-    original_r_p1 = parent1.genes[0].r
-    original_r_p2 = parent2.genes[0].r
+    original_r_p1 = parent1.genes[0, 6]
+    original_r_p2 = parent2.genes[0, 6]
 
-    child1.genes[0].r = 999
+    child1.genes[0, 6] = 999
 
-    assert parent1.genes[0].r == original_r_p1
-    assert parent2.genes[0].r == original_r_p2
+    assert parent1.genes[0, 6] == original_r_p1
+    assert parent2.genes[0, 6] == original_r_p2
 
 
 def test_uniform_p0_no_swap():
+    np.random.seed(42)
     parent1 = _make_parent([1, 2, 3, 4, 5])
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, child2 = UniformCrossover(p=0.0).crossover(parent1, parent2)
 
     for i in range(5):
-        assert child1.genes[i].r == parent1.genes[i].r
-        assert child2.genes[i].r == parent2.genes[i].r
+        assert child1.genes[i, 6] == parent1.genes[i, 6]
+        assert child2.genes[i, 6] == parent2.genes[i, 6]
 
 
 def test_uniform_p1_full_swap():
+    np.random.seed(42)
     parent1 = _make_parent([1, 2, 3, 4, 5])
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, child2 = UniformCrossover(p=1.0).crossover(parent1, parent2)
 
     for i in range(5):
-        assert child1.genes[i].r == parent2.genes[i].r
-        assert child2.genes[i].r == parent1.genes[i].r
+        assert child1.genes[i, 6] == parent2.genes[i, 6]
+        assert child2.genes[i, 6] == parent1.genes[i, 6]
 
 
 def test_uniform_p05_approx_half():
@@ -158,10 +155,10 @@ def test_uniform_p05_approx_half():
     total_swapped = 0
     n_trials = 1000
 
-    random.seed(99)
+    np.random.seed(99)
     for _ in range(n_trials):
         child1, _ = op.crossover(parent1, parent2)
-        swapped = sum(1 for i in range(20) if child1.genes[i].r == parent2.genes[i].r)
+        swapped = sum(1 for i in range(20) if child1.genes[i, 6] == parent2.genes[i, 6])
         total_swapped += swapped
 
     avg_fraction = total_swapped / (n_trials * 20)
@@ -169,21 +166,21 @@ def test_uniform_p05_approx_half():
 
 
 def test_uniform_copy_independence():
+    np.random.seed(42)
     parent1 = _make_parent([1, 2, 3, 4, 5])
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, _ = UniformCrossover(p=0.5).crossover(parent1, parent2)
-    original_r_p1 = parent1.genes[0].r
-    original_r_p2 = parent2.genes[0].r
+    original_r_p1 = parent1.genes[0, 6]
+    original_r_p2 = parent2.genes[0, 6]
 
-    child1.genes[0].r = 999
+    child1.genes[0, 6] = 999
 
-    assert parent1.genes[0].r == original_r_p1
-    assert parent2.genes[0].r == original_r_p2
+    assert parent1.genes[0, 6] == original_r_p1
+    assert parent2.genes[0, 6] == original_r_p2
 
 
 def test_annular_slide_example():
-    """P=11, L=5 on 12-gene chromosome swaps indices [11,0,1,2,3]."""
     parent1 = _make_parent(list(range(1, 13)))
     parent2 = _make_parent(list(range(101, 113)))
 
@@ -193,15 +190,14 @@ def test_annular_slide_example():
     swap_indices = {11, 0, 1, 2, 3}
     for i in range(12):
         if i in swap_indices:
-            assert child1.genes[i].r == parent2.genes[i].r
-            assert child2.genes[i].r == parent1.genes[i].r
+            assert child1.genes[i, 6] == parent2.genes[i, 6]
+            assert child2.genes[i, 6] == parent1.genes[i, 6]
         else:
-            assert child1.genes[i].r == parent1.genes[i].r
-            assert child2.genes[i].r == parent2.genes[i].r
+            assert child1.genes[i, 6] == parent1.genes[i, 6]
+            assert child2.genes[i, 6] == parent2.genes[i, 6]
 
 
 def test_annular_wrapping():
-    """n=10, P=8, L=4 => swap indices [8,9,0,1]."""
     parent1 = _make_parent(list(range(1, 11)))
     parent2 = _make_parent(list(range(101, 111)))
 
@@ -211,13 +207,12 @@ def test_annular_wrapping():
     swap_indices = {8, 9, 0, 1}
     for i in range(10):
         if i in swap_indices:
-            assert child1.genes[i].r == parent2.genes[i].r
+            assert child1.genes[i, 6] == parent2.genes[i, 6]
         else:
-            assert child1.genes[i].r == parent1.genes[i].r
+            assert child1.genes[i, 6] == parent1.genes[i, 6]
 
 
 def test_annular_l0_no_swap():
-    """L=0 means no genes are swapped — children are copies of parents."""
     parent1 = _make_parent([1, 2, 3, 4, 5])
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
@@ -225,8 +220,8 @@ def test_annular_l0_no_swap():
         child1, child2 = AnnularCrossover().crossover(parent1, parent2)
 
     for i in range(5):
-        assert child1.genes[i].r == parent1.genes[i].r
-        assert child2.genes[i].r == parent2.genes[i].r
+        assert child1.genes[i, 6] == parent1.genes[i, 6]
+        assert child2.genes[i, 6] == parent2.genes[i, 6]
 
 
 def test_annular_copy_independence():
@@ -234,10 +229,10 @@ def test_annular_copy_independence():
     parent2 = _make_parent([11, 12, 13, 14, 15])
 
     child1, _ = AnnularCrossover().crossover(parent1, parent2)
-    original_r_p1 = parent1.genes[0].r
-    original_r_p2 = parent2.genes[0].r
+    original_r_p1 = parent1.genes[0, 6]
+    original_r_p2 = parent2.genes[0, 6]
 
-    child1.genes[0].r = 999
+    child1.genes[0, 6] = 999
 
-    assert parent1.genes[0].r == original_r_p1
-    assert parent2.genes[0].r == original_r_p2
+    assert parent1.genes[0, 6] == original_r_p1
+    assert parent2.genes[0, 6] == original_r_p2

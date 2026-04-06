@@ -75,12 +75,15 @@ class GeneticAlgorithm:
         config = self.config
         height, width = self.target_image.shape[0], self.target_image.shape[1]
 
+        gene_type = getattr(config, 'gene_type', 'triangle')
+
         collector = MetricsCollector(
             output_dir=self.output_dir,
             save_every=config.save_every,
             renderer=self.renderer,
             width=width,
             height=height,
+            gene_type=gene_type,
         )
         collector.init_csv()
 

@@ -6,7 +6,8 @@ from fitness.mse import MSEFitness
 
 def test_individual_random_gene_count():
     ind = Individual.random(10)
-    assert len(ind.genes) == 10
+    assert ind.genes.shape[0] == 10
+    assert ind.genes.shape[1] == 11
 
 
 def test_individual_fitness_zero_initially():
@@ -17,11 +18,10 @@ def test_individual_fitness_zero_initially():
 def test_individual_copy_independence():
     original = Individual.random(5)
     copied = original.copy()
-    original.genes[0].r = 0
-    assert copied.genes[0].r != 0 or original.genes[0].r == 0
-    # Verificacion mas robusta: modificar y chequear que no se propaga
-    original.genes[0].x1 = 0.999
-    assert copied.genes[0].x1 != 0.999
+    original.genes[0, 6] = 0  # r
+    assert copied.genes[0, 6] != 0 or original.genes[0, 6] == 0
+    original.genes[0, 0] = 0.999  # x1
+    assert copied.genes[0, 0] != 0.999
 
 
 def test_compute_fitness_updates_value():

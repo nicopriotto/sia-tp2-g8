@@ -1,6 +1,9 @@
 import random
 
+import numpy as np
+
 from core.individual import Individual
+from genes import gene_layout
 from mutation.mutation_operator import MutationOperator
 
 
@@ -13,12 +16,13 @@ class MultiGenMutation(MutationOperator):
         mutated = individual.copy()
 
         if random.random() < self.mutation_rate:
-            n_genes = len(mutated.genes)
+            n_genes = mutated.genes.shape[0]
             m = min(self.max_genes, n_genes)
             k = random.randint(1, m)
             indices = random.sample(range(n_genes), k)
-            for i in indices:
-                mutated.genes[i] = mutated.genes[i].mutate_replace()
+            new_rows = gene_layout.random_genes(mutated.gene_type, k)
+            for i, idx in enumerate(indices):
+                mutated.genes[idx] = new_rows[i]
             mutated.fitness_valid = False
 
         return mutated

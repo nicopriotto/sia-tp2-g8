@@ -1,4 +1,4 @@
-import random
+import numpy as np
 
 from core.individual import Individual
 from crossover.crossover_operator import CrossoverOperator
@@ -9,15 +9,14 @@ class UniformCrossover(CrossoverOperator):
         self.p = p
 
     def crossover(self, p1: Individual, p2: Individual) -> tuple[Individual, Individual]:
-        genes_h1 = []
-        genes_h2 = []
+        mask = np.random.random(p1.genes.shape[0]) < self.p
 
-        for g1, g2 in zip(p1.genes, p2.genes):
-            if random.random() < self.p:
-                genes_h1.append(g2.copy())
-                genes_h2.append(g1.copy())
-            else:
-                genes_h1.append(g1.copy())
-                genes_h2.append(g2.copy())
+        c1 = p1.genes.copy()
+        c2 = p2.genes.copy()
+        c1[mask] = p2.genes[mask]
+        c2[mask] = p1.genes[mask]
 
-        return Individual(genes=genes_h1, fitness=0.0), Individual(genes=genes_h2, fitness=0.0)
+        return (
+            Individual(genes=c1, gene_type=p1.gene_type),
+            Individual(genes=c2, gene_type=p1.gene_type),
+        )

@@ -1,5 +1,7 @@
 import random
 
+import numpy as np
+
 from core.individual import Individual
 from crossover.crossover_operator import CrossoverOperator
 
@@ -9,18 +11,13 @@ class OnePointCrossover(CrossoverOperator):
 
     def crossover(self, p1: Individual, p2: Individual) -> tuple[Individual, Individual]:
         """Intercambia genes a partir de un punto de corte aleatorio."""
-        n_genes = len(p1.genes)
-        if len(p2.genes) != n_genes:
-            raise ValueError("Ambos padres deben tener la misma cantidad de genes.")
+        n_genes = p1.genes.shape[0]
 
         cut_point = random.randint(0, n_genes - 1)
 
-        child1_genes = [gene.copy() for gene in p1.genes[:cut_point]]
-        child1_genes.extend(gene.copy() for gene in p2.genes[cut_point:])
+        c1_genes = np.vstack([p1.genes[:cut_point], p2.genes[cut_point:]]).copy()
+        c2_genes = np.vstack([p2.genes[:cut_point], p1.genes[cut_point:]]).copy()
 
-        child2_genes = [gene.copy() for gene in p2.genes[:cut_point]]
-        child2_genes.extend(gene.copy() for gene in p1.genes[cut_point:])
-
-        child1 = Individual(genes=child1_genes, fitness=0.0)
-        child2 = Individual(genes=child2_genes, fitness=0.0)
+        child1 = Individual(genes=c1_genes, gene_type=p1.gene_type)
+        child2 = Individual(genes=c2_genes, gene_type=p1.gene_type)
         return child1, child2

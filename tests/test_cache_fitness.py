@@ -1,19 +1,18 @@
 import numpy as np
-import pytest
 
 from core.individual import Individual
-from genes.triangle_gene import TriangleGene
+from genes import gene_layout
 from mutation.gen_mutation import GenMutation
 
 
 def _make_individual(fitness=0.0, fitness_valid=False):
-    genes = [TriangleGene.random() for _ in range(5)]
-    return Individual(genes=genes, fitness=fitness, fitness_valid=fitness_valid)
+    genes = gene_layout.random_genes("triangle", 5)
+    return Individual(genes=genes, gene_type="triangle", fitness=fitness, fitness_valid=fitness_valid)
 
 
 def test_compute_fitness_no_reevalua_si_valid():
     class ExplodingRenderer:
-        def render(self, genes, width, height):
+        def render(self, genes, width, height, gene_type="triangle"):
             raise RuntimeError("No deberia llamarse render")
 
     class ExplodingFitness:

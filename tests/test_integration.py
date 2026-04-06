@@ -12,6 +12,8 @@ from core.individual import Individual
 from core.population import Population
 from crossover.one_point import OnePointCrossover
 from fitness.mse import MSEFitness
+from genes import gene_layout
+from genes.triangle_gene import TriangleGene
 from main import run_from_paths, build_operators, SELECTIONS, CROSSOVERS, MUTATIONS, SURVIVALS, FITNESS
 from mutation.gen_mutation import GenMutation
 from render.cpu_renderer import CPURenderer
@@ -39,51 +41,26 @@ def _make_config(**overrides) -> Config:
     return Config(**base)
 
 
-def _bad_gene():
-    from genes.triangle_gene import TriangleGene
-
-    return TriangleGene(
-        x1=0.0,
-        y1=0.0,
-        x2=1.0,
-        y2=0.0,
-        x3=0.0,
-        y3=1.0,
-        r=0,
-        g=0,
-        b=0,
-        a=1.0,
-    )
+def _bad_row():
+    """Triangulo negro opaco que cubre toda la imagen."""
+    return np.array([0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0, 0, 0, 1.0, 1.0], dtype=np.float64)
 
 
-def _good_gene():
-    from genes.triangle_gene import TriangleGene
-
-    return TriangleGene(
-        x1=0.0,
-        y1=0.0,
-        x2=1.0,
-        y2=0.0,
-        x3=0.0,
-        y3=1.0,
-        r=255,
-        g=255,
-        b=255,
-        a=0.0,
-    )
+def _good_row():
+    """Triangulo blanco transparente (no afecta canvas blanco)."""
+    return np.array([0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 255, 255, 255, 0.0, 1.0], dtype=np.float64)
 
 
 def _initial_population(size: int, triangle_count: int) -> Population:
     individuals = []
     for _ in range(size):
-        genes = [_bad_gene()] + [_good_gene() for _ in range(triangle_count - 1)]
-        individuals.append(Individual(genes=genes))
+        rows = [_bad_row()] + [_good_row() for _ in range(triangle_count - 1)]
+        genes = np.array(rows)
+        individuals.append(Individual(genes=genes, gene_type="triangle"))
     return Population(individuals=individuals)
 
 
 def test_fitness_increases_over_generations(monkeypatch):
-    from genes.triangle_gene import TriangleGene
-
     random.seed(123)
     np.random.seed(123)
 
@@ -104,8 +81,12 @@ def test_fitness_increases_over_generations(monkeypatch):
         individuals = [individual.copy() for individual in initial_population.individuals]
         return Population(individuals=individuals)
 
+    def fake_random_genes(gene_type, n):
+        """Siempre retorna good_rows (blanco transparente)."""
+        return np.array([_good_row() for _ in range(n)])
+
     monkeypatch.setattr(Population, "random", classmethod(fake_population_random))
-    monkeypatch.setattr(TriangleGene, "mutate_replace", lambda self: _good_gene().copy())
+    monkeypatch.setattr("genes.gene_layout.random_genes", fake_random_genes)
     monkeypatch.setattr("mutation.gen_mutation.random.randint", lambda low, high: 0)
 
     ga = GeneticAlgorithm(
@@ -200,7 +181,6 @@ def test_triangles_json_structure(tmp_path, monkeypatch):
 # --- Tests de integracion del factory ---
 
 def _make_factory_config(**overrides) -> Config:
-    """Config minima para tests de factory con 5 generaciones rapidas."""
     base = {
         "triangle_count": 3,
         "population_size": 6,
@@ -221,7 +201,6 @@ def _make_factory_config(**overrides) -> Config:
 
 
 def _run_ga_with_config(tmp_path, monkeypatch, config: Config):
-    """Helper: ejecuta el GA con una config dada y retorna el resultado."""
     monkeypatch.chdir(tmp_path)
     target = np.random.rand(10, 10, 4).astype(np.float32)
     renderer = CPURenderer()

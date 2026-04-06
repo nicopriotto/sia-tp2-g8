@@ -4,7 +4,6 @@ import os
 import numpy as np
 
 from render.renderer import Renderer
-from genes.triangle_gene import TriangleGene
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +121,9 @@ class GPURenderer(Renderer):
         )
         self.error_fbo = self.ctx.framebuffer(color_attachments=[self.error_texture])
 
-    def render(self, genes: list, width: int = None, height: int = None) -> np.ndarray:
+    def render(self, genes: np.ndarray, width: int = None, height: int = None, gene_type: str = "triangle") -> np.ndarray:
         """
-        Renderiza una lista de TriangleGene en la GPU.
+        Renderiza un array de genes en la GPU (solo triangulos).
 
         Retorna imagen como numpy array float32 (H, W, 4) en [0, 1].
         """
@@ -135,33 +134,41 @@ class GPURenderer(Renderer):
         self.ctx.viewport = (0, 0, w, h)
         self.ctx.clear(1.0, 1.0, 1.0, 1.0)
 
-        active = [g for g in genes if isinstance(g, TriangleGene) and getattr(g, 'active', True)]
+        if len(genes) > 0:
+            # Filtrar activos: columna 10 > 0.5
+            active_mask = genes[:, 10] > 0.5
+            active = genes[active_mask]
 
-        if active:
-            vertex_data = np.empty(len(active) * 3 * 6, dtype='f4')
-            idx = 0
-            for gene in active:
-                r, g, b, a = gene.r / 255.0, gene.g / 255.0, gene.b / 255.0, gene.a
-                vertex_data[idx:idx+6] = [gene.x1, gene.y1, r, g, b, a]
-                vertex_data[idx+6:idx+12] = [gene.x2, gene.y2, r, g, b, a]
-                vertex_data[idx+12:idx+18] = [gene.x3, gene.y3, r, g, b, a]
-                idx += 18
+            if len(active) > 0:
+                n = active.shape[0]
+                # Vectorized packing: cada triangulo = 3 vertices x 6 floats (x, y, r, g, b, a)
+                vertex_data = np.empty((n, 3, 6), dtype='f4')
+                # Coordenadas de vertices
+                for v, (xi, yi) in enumerate([(0, 1), (2, 3), (4, 5)]):
+                    vertex_data[:, v, 0] = active[:, xi]
+                    vertex_data[:, v, 1] = active[:, yi]
+                # Color normalizado (compartido entre los 3 vertices)
+                for v in range(3):
+                    vertex_data[:, v, 2] = active[:, 6] / 255.0  # r
+                    vertex_data[:, v, 3] = active[:, 7] / 255.0  # g
+                    vertex_data[:, v, 4] = active[:, 8] / 255.0  # b
+                    vertex_data[:, v, 5] = active[:, 9]           # a
 
-            vbo = self.ctx.buffer(vertex_data)
-            vao = self.ctx.vertex_array(
-                self.triangle_program,
-                [(vbo, '2f 4f', 'in_position', 'in_color')],
-            )
-            vao.render(mode=self.ctx.TRIANGLES)
-            vbo.release()
-            vao.release()
+                vbo = self.ctx.buffer(vertex_data.reshape(-1))
+                vao = self.ctx.vertex_array(
+                    self.triangle_program,
+                    [(vbo, '2f 4f', 'in_position', 'in_color')],
+                )
+                vao.render(mode=self.ctx.TRIANGLES)
+                vbo.release()
+                vao.release()
 
         raw = self.render_fbo.read(components=4, dtype='f4')
         image = np.frombuffer(raw, dtype=np.float32).reshape((h, w, 4))
         image = np.flipud(image)
         return image.copy()
 
-    def compute_fitness(self, genes: list, fitness_type: str = "mse") -> float:
+    def compute_fitness(self, genes: np.ndarray, fitness_type: str = "mse", gene_type: str = "triangle") -> float:
         """
         Renderiza los triangulos y calcula el fitness enteramente en GPU.
 
@@ -169,7 +176,7 @@ class GPURenderer(Renderer):
             Fitness en rango (0, 1].
         """
         # Paso 0: Renderizar triangulos
-        self.render(genes)
+        self.render(genes, gene_type=gene_type)
 
         # Paso 1: Calcular error por pixel
         self.error_fbo.use()

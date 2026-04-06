@@ -1,26 +1,21 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
 import numpy as np
-from genes.gene import Gene
-from genes.triangle_gene import TriangleGene
-from genes.ellipse_gene import EllipseGene
+
+from genes import gene_layout
 from render.renderer import Renderer
 from fitness.fitness_function import FitnessFunction
-
-# Mapa de tipo de gen a clase concreta
-_GENE_TYPES: dict[str, type[Gene]] = {
-    "triangle": TriangleGene,
-    "ellipse": EllipseGene,
-}
 
 
 @dataclass
 class Individual:
     """Representa un individuo del algoritmo genetico.
 
-    Un individuo es una lista ordenada de genes (triangulos o elipses) y su fitness.
+    Un individuo es un array numpy de genes (shape n_genes x 11) y su fitness.
     El fitness se inicializa en 0.0 y se actualiza con compute_fitness().
     """
-    genes: list[Gene]
+    genes: np.ndarray
+    gene_type: str = "triangle"
     fitness: float = 0.0
     fitness_valid: bool = False
 
@@ -35,18 +30,21 @@ class Individual:
         Returns:
             Individual con genes aleatorios y fitness 0.0.
         """
-        gene_cls = _GENE_TYPES.get(gene_type, TriangleGene)
-        genes = [gene_cls.random() for _ in range(n_triangles)]
-        return cls(genes=genes)
+        genes = gene_layout.random_genes(gene_type, n_triangles)
+        return cls(genes=genes, gene_type=gene_type)
 
     def copy(self) -> "Individual":
         """Retorna una copia profunda del individuo.
 
-        Cada gen se copia independientemente para evitar referencias compartidas.
+        El array de genes se copia independientemente.
         El fitness se copia tal cual.
         """
-        copied_genes = [gene.copy() for gene in self.genes]
-        return Individual(genes=copied_genes, fitness=self.fitness, fitness_valid=self.fitness_valid)
+        return Individual(
+            genes=self.genes.copy(),
+            gene_type=self.gene_type,
+            fitness=self.fitness,
+            fitness_valid=self.fitness_valid,
+        )
 
     def compute_fitness(
         self,
@@ -67,7 +65,7 @@ class Individual:
         if self.fitness_valid:
             return
         height, width = target.shape[0], target.shape[1]
-        generated = renderer.render(self.genes, width, height)
+        generated = renderer.render(self.genes, width, height, gene_type=self.gene_type)
         self.fitness = fitness_fn.compute(generated, target)
         self.fitness_valid = True
 
@@ -78,6 +76,9 @@ class Individual:
             dict con claves 'genes' (lista de dicts) y 'fitness' (float).
         """
         return {
-            "genes": [gene.to_dict() for gene in self.genes],
-            "fitness": self.fitness,
+            "genes": [
+                gene_layout.row_to_dict(self.genes[i], self.gene_type)
+                for i in range(self.genes.shape[0])
+            ],
+            "fitness": float(self.fitness),
         }

@@ -32,10 +32,10 @@ def test_elite_returns_copies():
 
     selected = EliteSelection().select(population, 4)
     selected[0].fitness = -1
-    selected[0].genes[0].r = 0
+    selected[0].genes[0, 6] = 0  # r column
 
     assert population.individuals[0].fitness == 78
-    assert population.individuals[0].genes[0].r != 0
+    assert population.individuals[0].genes[0, 6] != 0
 
 
 def test_elite_k_equals_n():
