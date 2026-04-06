@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -56,6 +57,9 @@ class GeneticAlgorithm:
         self.context = context
         self.output_dir = output_dir
 
+        from render.cpu_renderer import CPURenderer
+        self._parallel = isinstance(renderer, CPURenderer)
+
         # Pesos para seleccion ponderada de operadores
         self.selection_weights = config.selection_weights if config.selection_weights else [1.0] * len(self.selection_ops)
         self.crossover_weights = config.crossover_weights if config.crossover_weights else [1.0] * len(self.crossover_ops)
@@ -100,6 +104,15 @@ class GeneticAlgorithm:
         if k_offspring % 2 != 0:
             k_offspring += 1
 
+        target = self.target_image
+        renderer = self.renderer
+        fitness_fn = self.fitness_fn
+
+        def _eval_child(child):
+            child.compute_fitness(target, renderer, fitness_fn)
+
+        executor = ThreadPoolExecutor() if self._parallel else None
+
         stop_reason: str | None = None
         last_generation = 0
         best_fitness_history: list[float] = [population.best.fitness]
@@ -143,8 +156,11 @@ class GeneticAlgorithm:
                 last_child = mutation_op.mutate(last_child, generation, config.max_generations)
                 children.append(last_child)
 
-            for child in children:
-                child.compute_fitness(self.target_image, self.renderer, self.fitness_fn)
+            if executor is not None:
+                list(executor.map(_eval_child, children))
+            else:
+                for child in children:
+                    child.compute_fitness(target, renderer, fitness_fn)
 
             population = self.survival.apply(population, children, selector)
 
@@ -204,6 +220,9 @@ class GeneticAlgorithm:
             if generation >= config.max_generations:
                 stop_reason = "generaciones_maximas"
                 break
+
+        if executor is not None:
+            executor.shutdown(wait=False)
 
         if stop_reason is None:
             stop_reason = "generaciones_maximas"
