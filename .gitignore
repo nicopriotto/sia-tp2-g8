@@ -208,3 +208,10 @@ __marimo__/
 
 # Project output (generated images, metrics, etc.)
 output/
+experiments/results/
+
+# Project presentation
+presentacion/
+
+# Assets
+images/

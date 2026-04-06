@@ -4,14 +4,163 @@ import sys
 import numpy as np
 from PIL import Image
 
-from config.config_loader import load_config
+from config.config_loader import load_config, Config
+from core.ga_context import GAContext
 from core.genetic_algorithm import GeneticAlgorithm
-from crossover.one_point import OnePointCrossover
-from fitness.mse import MSEFitness
-from mutation.gen_mutation import GenMutation
 from render.cpu_renderer import CPURenderer
+
+logger = logging.getLogger(__name__)
+
+from selection.selection_strategy import SelectionStrategy
 from selection.elite import EliteSelection
+from selection.roulette import RouletteSelection
+from selection.universal import UniversalSelection
+from selection.boltzmann import BoltzmannSelection
+from selection.tournament import DeterministicTournamentSelection, ProbabilisticTournamentSelection
+from selection.ranking import RankingSelection
+
+from crossover.one_point import OnePointCrossover
+from crossover.two_point import TwoPointCrossover
+from crossover.uniform import UniformCrossover
+from crossover.annular import AnnularCrossover
+from crossover.arithmetic import ArithmeticCrossover
+
+from mutation.gen_mutation import GenMutation
+from mutation.multigen_mutation import MultiGenMutation
+from mutation.uniform_mutation import UniformMutation
+from mutation.complete_mutation import CompleteMutation
+from mutation.non_uniform_mutation import NonUniformMutation
+from mutation.gaussian_mutation import GaussianMutation
+
 from survival.additive import AdditiveSurvival
+from survival.exclusive import ExclusiveSurvival
+
+from fitness.mse import MSEFitness
+from fitness.mae import MAEFitness
+
+
+SELECTIONS = {
+    "Elite": EliteSelection,
+    "Ruleta": RouletteSelection,
+    "Universal": UniversalSelection,
+    "Boltzmann": BoltzmannSelection,
+    "TorneosDeterministicos": DeterministicTournamentSelection,
+    "TorneosProbabilisticos": ProbabilisticTournamentSelection,
+    "Ranking": RankingSelection,
+}
+
+CROSSOVERS = {
+    "OnePoint": OnePointCrossover,
+    "TwoPoint": TwoPointCrossover,
+    "Uniform": UniformCrossover,
+    "Annular": AnnularCrossover,
+    "Aritmetico": ArithmeticCrossover,
+}
+
+MUTATIONS = {
+    "Gen": GenMutation,
+    "MultiGen": MultiGenMutation,
+    "Uniforme": UniformMutation,
+    "Completa": CompleteMutation,
+    "NoUniforme": NonUniformMutation,
+    "Gaussiana": GaussianMutation,
+}
+
+SURVIVALS = {
+    "Aditiva": AdditiveSurvival,
+    "Exclusiva": ExclusiveSurvival,
+}
+
+FITNESS = {
+    "MSE": MSEFitness,
+    "MAE": MAEFitness,
+}
+
+
+def _build_selection(sel_name: str, config: Config) -> SelectionStrategy:
+    """Instancia un operador de seleccion por nombre."""
+    if sel_name not in SELECTIONS:
+        raise ValueError(f"Metodo de seleccion desconocido: '{sel_name}'. Opciones: {list(SELECTIONS.keys())}")
+    sel_class = SELECTIONS[sel_name]
+    if sel_name == "Boltzmann":
+        return sel_class(
+            t0=config.boltzmann_t0,
+            tc=config.boltzmann_tc,
+            k=config.boltzmann_k,
+        )
+    elif sel_name == "TorneosDeterministicos":
+        return sel_class(m=config.tournament_m)
+    elif sel_name == "TorneosProbabilisticos":
+        return sel_class(threshold=config.tournament_threshold)
+    else:
+        return sel_class()
+
+
+def build_operators(config: Config):
+    """Instancia todos los operadores a partir de la configuracion.
+
+    Soporta multiples operadores de seleccion con pesos ponderados.
+    Retorna (selection_ops, crossover_ops, mutation_ops, survival, fitness)
+    donde selection_ops es una lista de operadores de seleccion.
+    """
+
+    # Seleccion: soportar multiples metodos via selection_methods
+    sel_names = config.selection_methods if config.selection_methods else [config.selection_method]
+    selection_ops = [_build_selection(name, config) for name in sel_names]
+
+    # Crossover
+    crossover_ops = []
+    for cx_name in config.crossover_methods:
+        if cx_name not in CROSSOVERS:
+            raise ValueError(f"Metodo de crossover desconocido: '{cx_name}'. Opciones: {list(CROSSOVERS.keys())}")
+        if cx_name == "Aritmetico":
+            crossover_ops.append(CROSSOVERS[cx_name](alpha=config.arithmetic_alpha))
+        else:
+            crossover_ops.append(CROSSOVERS[cx_name]())
+
+    # Mutacion
+    mutation_ops = []
+    for mut_name in config.mutation_methods:
+        if mut_name not in MUTATIONS:
+            raise ValueError(f"Metodo de mutacion desconocido: '{mut_name}'. Opciones: {list(MUTATIONS.keys())}")
+        mut_class = MUTATIONS[mut_name]
+        if mut_name == "NoUniforme":
+            mutation_ops.append(mut_class(mutation_rate=config.mutation_rate, b=config.non_uniform_b))
+        elif mut_name == "MultiGen":
+            mutation_ops.append(mut_class(mutation_rate=config.mutation_rate, max_genes=config.triangle_count))
+        elif mut_name == "Gaussiana":
+            mutation_ops.append(mut_class(mutation_rate=config.mutation_rate, sigma=config.gaussian_sigma))
+        else:
+            mutation_ops.append(mut_class(mutation_rate=config.mutation_rate))
+
+    # Supervivencia
+    surv_name = config.survival_strategy
+    if surv_name not in SURVIVALS:
+        raise ValueError(f"Estrategia de supervivencia desconocida: '{surv_name}'. Opciones: {list(SURVIVALS.keys())}")
+    survival = SURVIVALS[surv_name]()
+
+    # Fitness
+    fit_name = config.fitness_function
+    if fit_name not in FITNESS:
+        raise ValueError(f"Funcion de fitness desconocida: '{fit_name}'. Opciones: {list(FITNESS.keys())}")
+    fitness = FITNESS[fit_name]()
+
+    return selection_ops, crossover_ops, mutation_ops, survival, fitness
+
+
+def create_renderer(config: Config, target_image: np.ndarray, width: int, height: int):
+    """Crea el renderer apropiado segun la configuracion y disponibilidad."""
+    if config.use_gpu:
+        from render.gpu_renderer import GPURenderer, gpu_available
+        if gpu_available():
+            device_info = GPURenderer.detect_device(config.gpu_device)
+            logger.info("Usando renderer GPU: %s", device_info)
+            return GPURenderer(width, height, target_image)
+        else:
+            logger.warning("GPU solicitada pero no disponible. Fallback a CPU.")
+            return CPURenderer()
+    else:
+        return CPURenderer()
 
 
 def run_from_paths(image_path: str, config_path: str):
@@ -21,22 +170,29 @@ def run_from_paths(image_path: str, config_path: str):
     img = Image.open(image_path).convert("RGBA")
     target = np.array(img, dtype=np.float32) / 255.0
 
-    renderer = CPURenderer()
-    fitness_fn = MSEFitness()
-    selection = EliteSelection()
-    crossover_ops = [OnePointCrossover()]
-    mutation_ops = [GenMutation(config.mutation_rate)]
-    survival = AdditiveSurvival()
+    height, width = target.shape[0], target.shape[1]
+    renderer = create_renderer(config, target, width, height)
+    selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
+
+    context = GAContext(generation=0, max_generations=config.max_generations)
+
+    for sel in selection_ops:
+        if hasattr(sel, 'context'):
+            sel.context = context
+    for mut in mutation_ops:
+        if hasattr(mut, 'context'):
+            mut.context = context
 
     ga = GeneticAlgorithm(
         config=config,
         target_image=target,
         renderer=renderer,
-        fitness_fn=fitness_fn,
-        selection=selection,
+        fitness_fn=fitness,
+        selection_ops=selection_ops,
         crossover_ops=crossover_ops,
         mutation_ops=mutation_ops,
         survival=survival,
+        context=context,
     )
 
     result = ga.run()

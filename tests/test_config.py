@@ -17,13 +17,13 @@ VALID_DATA = {
     "population_size": 20,
     "max_generations": 100,
     "fitness_threshold": 0.95,
-    "selection_method": "elite",
-    "crossover_methods": ["one_point"],
+    "selection_method": "Elite",
+    "crossover_methods": ["OnePoint"],
     "crossover_probability": 0.7,
-    "mutation_methods": ["gen"],
+    "mutation_methods": ["Gen"],
     "mutation_rate": 0.05,
-    "survival_strategy": "generational",
-    "fitness_function": "mse",
+    "survival_strategy": "Aditiva",
+    "fitness_function": "MSE",
     "k_offspring": 16,
     "save_every": 10,
 }
@@ -34,7 +34,7 @@ def test_load_valid_config():
     config = load_config(path)
     assert config.triangle_count == 10
     assert config.population_size == 20
-    assert config.selection_method == "elite"
+    assert config.selection_method == "Elite"
 
 
 def test_invalid_selection_method():

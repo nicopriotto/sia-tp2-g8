@@ -1,31 +1,41 @@
 from dataclasses import dataclass
 import numpy as np
+from genes.gene import Gene
 from genes.triangle_gene import TriangleGene
+from genes.ellipse_gene import EllipseGene
 from render.renderer import Renderer
 from fitness.fitness_function import FitnessFunction
+
+# Mapa de tipo de gen a clase concreta
+_GENE_TYPES: dict[str, type[Gene]] = {
+    "triangle": TriangleGene,
+    "ellipse": EllipseGene,
+}
 
 
 @dataclass
 class Individual:
     """Representa un individuo del algoritmo genetico.
 
-    Un individuo es una lista ordenada de genes (triangulos) y su fitness.
+    Un individuo es una lista ordenada de genes (triangulos o elipses) y su fitness.
     El fitness se inicializa en 0.0 y se actualiza con compute_fitness().
     """
-    genes: list[TriangleGene]
+    genes: list[Gene]
     fitness: float = 0.0
 
     @classmethod
-    def random(cls, n_triangles: int) -> "Individual":
+    def random(cls, n_triangles: int, gene_type: str = "triangle") -> "Individual":
         """Crea un individuo con n_triangles genes aleatorios.
 
         Args:
-            n_triangles: Cantidad de triangulos (genes) del individuo.
+            n_triangles: Cantidad de genes del individuo.
+            gene_type: Tipo de gen a crear ("triangle" o "ellipse").
 
         Returns:
             Individual con genes aleatorios y fitness 0.0.
         """
-        genes = [TriangleGene.random() for _ in range(n_triangles)]
+        gene_cls = _GENE_TYPES.get(gene_type, TriangleGene)
+        genes = [gene_cls.random() for _ in range(n_triangles)]
         return cls(genes=genes)
 
     def copy(self) -> "Individual":

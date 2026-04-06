@@ -124,5 +124,5 @@ def test_mutate_delta_degenerate_falls_back_to_original():
 def test_to_dict_keys():
     gene = TriangleGene.random()
     d = gene.to_dict()
-    expected_keys = {"x1", "y1", "x2", "y2", "x3", "y3", "r", "g", "b", "a"}
+    expected_keys = {"x1", "y1", "x2", "y2", "x3", "y3", "r", "g", "b", "a", "active"}
     assert set(d.keys()) == expected_keys

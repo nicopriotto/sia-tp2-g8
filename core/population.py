@@ -14,17 +14,18 @@ class Population:
     individuals: list[Individual]
 
     @classmethod
-    def random(cls, size: int, n_triangles: int) -> "Population":
+    def random(cls, size: int, n_triangles: int, gene_type: str = "triangle") -> "Population":
         """Crea una poblacion aleatoria.
 
         Args:
             size: Cantidad de individuos en la poblacion.
-            n_triangles: Cantidad de triangulos por individuo.
+            n_triangles: Cantidad de genes por individuo.
+            gene_type: Tipo de gen a crear ("triangle" o "ellipse").
 
         Returns:
             Population con 'size' individuos aleatorios.
         """
-        individuals = [Individual.random(n_triangles) for _ in range(size)]
+        individuals = [Individual.random(n_triangles, gene_type) for _ in range(size)]
         return cls(individuals=individuals)
 
     @property

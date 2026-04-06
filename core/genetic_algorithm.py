@@ -5,6 +5,7 @@ import time
 import numpy as np
 
 from config.config_loader import Config
+from core.ga_context import GAContext
 from core.ga_result import GAResult
 from core.metrics_collector import MetricsCollector
 from crossover.crossover_operator import CrossoverOperator
@@ -27,19 +28,43 @@ class GeneticAlgorithm:
         target_image: np.ndarray,
         renderer: Renderer,
         fitness_fn: FitnessFunction,
-        selection: SelectionStrategy,
-        crossover_ops: list[CrossoverOperator],
-        mutation_ops: list[MutationOperator],
-        survival: SurvivalStrategy,
+        selection: SelectionStrategy | None = None,
+        crossover_ops: list[CrossoverOperator] | None = None,
+        mutation_ops: list[MutationOperator] | None = None,
+        survival: SurvivalStrategy | None = None,
+        context: GAContext | None = None,
+        output_dir: str = "output",
+        selection_ops: list[SelectionStrategy] | None = None,
     ):
         self.config = config
         self.target_image = target_image
         self.renderer = renderer
         self.fitness_fn = fitness_fn
-        self.selection = selection
-        self.crossover_ops = crossover_ops
-        self.mutation_ops = mutation_ops
+
+        # Soportar seleccion multiple ponderada.
+        # Si se pasa selection_ops (lista), usarla; sino usar selection (singular, backward compat).
+        if selection_ops is not None:
+            self.selection_ops = selection_ops
+        elif selection is not None:
+            self.selection_ops = [selection]
+        else:
+            raise ValueError("Se requiere 'selection' o 'selection_ops'")
+
+        self.crossover_ops = crossover_ops or []
+        self.mutation_ops = mutation_ops or []
         self.survival = survival
+        self.context = context
+        self.output_dir = output_dir
+
+        # Pesos para seleccion ponderada de operadores
+        self.selection_weights = config.selection_weights if config.selection_weights else [1.0] * len(self.selection_ops)
+        self.crossover_weights = config.crossover_weights if config.crossover_weights else [1.0] * len(self.crossover_ops)
+        self.mutation_weights = config.mutation_weights if config.mutation_weights else [1.0] * len(self.mutation_ops)
+
+    @staticmethod
+    def _choose_operator(operators: list, weights: list):
+        """Elige un operador segun pesos ponderados."""
+        return random.choices(operators, weights=weights, k=1)[0]
 
     def run(self) -> GAResult:
         """Ejecuta el ciclo evolutivo completo y retorna un GAResult."""
@@ -47,7 +72,7 @@ class GeneticAlgorithm:
         height, width = self.target_image.shape[0], self.target_image.shape[1]
 
         collector = MetricsCollector(
-            output_dir="output",
+            output_dir=self.output_dir,
             save_every=config.save_every,
             renderer=self.renderer,
             width=width,
@@ -57,7 +82,8 @@ class GeneticAlgorithm:
 
         start_time = time.time()
 
-        population = Population.random(config.population_size, config.triangle_count)
+        gene_type = getattr(config, 'gene_type', 'triangle')
+        population = Population.random(config.population_size, config.triangle_count, gene_type)
         population.evaluate_all(self.target_image, self.renderer, self.fitness_fn)
 
         collector.log_generation(0, population, time.time() - start_time)
@@ -82,6 +108,9 @@ class GeneticAlgorithm:
         for generation in range(1, config.max_generations + 1):
             generation_start = time.time()
 
+            if self.context is not None:
+                self.context.generation = generation
+
             # Criterio: tiempo maximo
             if config.max_seconds > 0:
                 elapsed = time.time() - start_time
@@ -90,9 +119,10 @@ class GeneticAlgorithm:
                     last_generation = generation - 1
                     break
 
-            parents = self.selection.select(population, k_offspring, generation=generation)
-            crossover_op = random.choice(self.crossover_ops)
-            mutation_op = random.choice(self.mutation_ops)
+            selector = self._choose_operator(self.selection_ops, self.selection_weights)
+            parents = selector.select(population, k_offspring, generation=generation)
+            crossover_op = self._choose_operator(self.crossover_ops, self.crossover_weights)
+            mutation_op = self._choose_operator(self.mutation_ops, self.mutation_weights)
 
             children = []
             for index in range(0, len(parents) - 1, 2):
@@ -116,7 +146,7 @@ class GeneticAlgorithm:
             for child in children:
                 child.compute_fitness(self.target_image, self.renderer, self.fitness_fn)
 
-            population = self.survival.apply(population, children, self.selection)
+            population = self.survival.apply(population, children, selector)
 
             best_fitness_history.append(population.best.fitness)
 
@@ -140,6 +170,18 @@ class GeneticAlgorithm:
             if population.best.fitness >= config.fitness_threshold:
                 stop_reason = "fitness_alcanzado"
                 break
+
+            # Criterio: error minimo alcanzado
+            if config.min_error > 0:
+                best = population.best
+                current_error = (1.0 / best.fitness) - 1.0 if best.fitness > 0 else float('inf')
+                if current_error <= config.min_error:
+                    stop_reason = "error_minimo"
+                    logger.info(
+                        "Error minimo alcanzado en generacion %d: error=%.6f <= min_error=%.6f",
+                        generation, current_error, config.min_error,
+                    )
+                    break
 
             # Criterio: contenido
             if config.content_generations > 0 and len(best_fitness_history) >= config.content_generations:
