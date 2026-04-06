@@ -26,7 +26,8 @@ def gpu_available() -> bool:
         ctx = moderngl.create_standalone_context(**_ctx_kwargs())
         ctx.release()
         return True
-    except Exception:
+    except Exception as e:
+        logger.debug("gpu_available() fallo: %s", e)
         return False
 
 
