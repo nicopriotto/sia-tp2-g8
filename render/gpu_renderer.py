@@ -1,5 +1,7 @@
 import logging
 import os
+import platform
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -7,12 +9,130 @@ from render.renderer import Renderer
 
 logger = logging.getLogger(__name__)
 
+DEDICATED_OFFLOAD_ENV = {
+    "__NV_PRIME_RENDER_OFFLOAD": "1",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+}
 
-def gpu_available() -> bool:
+DEDICATED_MARKERS = (
+    "nvidia",
+    "geforce",
+    "rtx",
+    "gtx",
+    "quadro",
+    "tesla",
+    "radeon rx",
+    "firepro",
+    "radeon pro",
+)
+
+INTEGRATED_MARKERS = (
+    "intel",
+    "iris",
+    "uhd",
+    "renoir",
+    "cezanne",
+    "rembrandt",
+    "phoenix",
+    "raven",
+    "radeon graphics",
+    "apu",
+)
+
+SOFTWARE_MARKERS = (
+    "llvmpipe",
+    "softpipe",
+    "software rasterizer",
+)
+
+
+@contextmanager
+def _temporary_env(overrides: dict[str, str | None]):
+    """Aplica overrides de entorno solo durante la creacion del contexto."""
+    previous: dict[str, str] = {}
+    missing: set[str] = set()
+
+    for key, value in overrides.items():
+        if key in os.environ:
+            previous[key] = os.environ[key]
+        else:
+            missing.add(key)
+
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            os.environ[key] = value
+        for key in missing:
+            os.environ.pop(key, None)
+
+
+def _context_env_overrides(preference: str) -> dict[str, str | None]:
+    if platform.system().lower() != "linux":
+        return {}
+
+    if preference == "dedicated":
+        return DEDICATED_OFFLOAD_ENV.copy()
+
+    if preference == "integrated":
+        return {key: None for key in DEDICATED_OFFLOAD_ENV}
+
+    return {}
+
+
+def _classify_device_info(info: dict) -> tuple[str, str]:
+    vendor = str(info.get("GL_VENDOR", "") or "")
+    renderer_name = str(info.get("GL_RENDERER", "") or "") or vendor or "unknown"
+    combined = f"{vendor} {renderer_name}".lower()
+
+    if any(marker in combined for marker in SOFTWARE_MARKERS):
+        return "unknown", renderer_name
+
+    if any(marker in combined for marker in INTEGRATED_MARKERS):
+        return "integrated", renderer_name
+
+    if any(marker in combined for marker in DEDICATED_MARKERS):
+        return "dedicated", renderer_name
+
+    return "unknown", renderer_name
+
+
+def _validate_device_preference(preference: str, device_type: str, renderer_name: str) -> None:
+    if preference == "dedicated" and device_type != "dedicated":
+        raise RuntimeError(
+            f"GPU dedicada solicitada pero no disponible. Contexto creado sobre: {renderer_name}"
+        )
+
+    if preference == "integrated" and device_type != "integrated":
+        raise RuntimeError(
+            f"GPU integrada solicitada pero no disponible. Contexto creado sobre: {renderer_name}"
+        )
+
+
+def _create_validated_context(preference: str = "auto"):
+    import moderngl
+
+    with _temporary_env(_context_env_overrides(preference)):
+        ctx = moderngl.create_standalone_context()
+
+    device_type, renderer_name = _classify_device_info(ctx.info)
+    try:
+        _validate_device_preference(preference, device_type, renderer_name)
+        return ctx, device_type, renderer_name
+    except Exception:
+        ctx.release()
+        raise
+
+
+def gpu_available(preference: str = "auto") -> bool:
     """Retorna True si ModernGL esta instalado y puede crear un contexto offscreen."""
     try:
-        import moderngl
-        ctx = moderngl.create_standalone_context()
+        ctx, _, _ = _create_validated_context(preference)
         ctx.release()
         return True
     except Exception:
@@ -25,12 +145,19 @@ class GPURenderer(Renderer):
     y calcular fitness directamente en shaders.
     """
 
-    def __init__(self, width: int, height: int, target_image: np.ndarray):
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        target_image: np.ndarray,
+        device_preference: str = "auto",
+    ):
         import moderngl
 
         self.width = width
         self.height = height
-        self.ctx = moderngl.create_standalone_context()
+        self.ctx, self.device_type, self.renderer_name = _create_validated_context(device_preference)
+        self.device_info = f"{self.device_type}: {self.renderer_name}"
 
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = (
@@ -56,7 +183,12 @@ class GPURenderer(Renderer):
 
         self._init_fitness_pipeline()
 
-        logger.info("GPURenderer inicializado: %dx%d, backend ModernGL", width, height)
+        logger.info(
+            "GPURenderer inicializado: %dx%d, backend ModernGL, device %s",
+            width,
+            height,
+            self.device_info,
+        )
 
     def _load_shaders(self):
         shader_dir = os.path.join(os.path.dirname(__file__), "shaders")
@@ -236,31 +368,11 @@ class GPURenderer(Renderer):
     def detect_device(preference: str = "auto") -> str:
         """Detecta el dispositivo GPU disponible."""
         try:
-            import moderngl
-            ctx = moderngl.create_standalone_context()
-            info = ctx.info
-            vendor = info.get("GL_VENDOR", "").lower()
-            renderer_name = info.get("GL_RENDERER", "").lower()
+            ctx, device_type, renderer_name = _create_validated_context(preference)
             ctx.release()
-
-            is_dedicated = any(
-                kw in vendor or kw in renderer_name
-                for kw in ["nvidia", "amd", "radeon", "geforce", "rtx", "gtx"]
-            )
-            is_integrated = any(
-                kw in vendor or kw in renderer_name
-                for kw in ["intel", "mesa", "llvmpipe"]
-            )
-
-            device_type = "dedicated" if is_dedicated else "integrated" if is_integrated else "unknown"
-
-            if preference == "dedicated" and not is_dedicated:
-                logger.warning("GPU dedicada solicitada pero no encontrada. Disponible: %s", renderer_name)
-
             return f"{device_type}: {renderer_name}"
-
         except Exception as e:
-            logger.warning("No se pudo detectar GPU: %s", e)
+            logger.warning("No se pudo detectar GPU para preferencia '%s': %s", preference, e)
             return "none"
 
     def release(self):

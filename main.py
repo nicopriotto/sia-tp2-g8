@@ -152,15 +152,31 @@ def create_renderer(config: Config, target_image: np.ndarray, width: int, height
     """Crea el renderer apropiado segun la configuracion y disponibilidad."""
     if config.use_gpu:
         from render.gpu_renderer import GPURenderer, gpu_available
-        if gpu_available():
+
+        if gpu_available(config.gpu_device):
             device_info = GPURenderer.detect_device(config.gpu_device)
             logger.info("Usando renderer GPU: %s", device_info)
-            return GPURenderer(width, height, target_image)
-        else:
-            logger.warning("GPU solicitada pero no disponible. Fallback a CPU.")
-            return CPURenderer()
-    else:
+            return GPURenderer(
+                width,
+                height,
+                target_image,
+                device_preference=config.gpu_device,
+            )
+
+        if config.gpu_device == "dedicated":
+            detected = GPURenderer.detect_device("auto")
+            raise RuntimeError(
+                "GPU dedicada solicitada pero no disponible. "
+                f"Dispositivo detectado: {detected}"
+            )
+
+        logger.warning(
+            "GPU solicitada pero no disponible para preferencia '%s'. Fallback a CPU.",
+            config.gpu_device,
+        )
         return CPURenderer()
+
+    return CPURenderer()
 
 
 def run_from_paths(image_path: str, config_path: str):

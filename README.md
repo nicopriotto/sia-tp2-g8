@@ -79,7 +79,7 @@ El archivo de configuracion es un JSON con los siguientes campos:
 | `structure_threshold` | float | 0.0 | >= 0 | Umbral de diversidad para criterio de estructura (0 = desactivado) |
 | `structure_generations` | int | 0 | >= 0 | Generaciones consecutivas para criterio de estructura (0 = desactivado) |
 | `use_gpu` | bool | false | true/false | Usar renderer GPU con ModernGL |
-| `gpu_device` | str | "auto" | "auto", "dedicated", "integrated" | Tipo de dispositivo GPU preferido |
+| `gpu_device` | str | "auto" | "auto", "dedicated", "integrated" | Politica de seleccion GPU: default del sistema, dedicada obligatoria o integrada obligatoria |
 | `min_error` | float | 0.0 | >= 0 | Error minimo para criterio de corte (0 = desactivado) |
 | `gene_type` | str | "triangle" | "triangle", "ellipse" | Tipo de gen/figura geometrica |
 | `arithmetic_alpha` | float | 0.5 | [0, 1] | Factor de interpolacion para crossover aritmetico |
@@ -88,6 +88,8 @@ El archivo de configuracion es un JSON con los siguientes campos:
 | `selection_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de metodos de seleccion |
 | `crossover_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de crossover |
 | `mutation_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de mutacion |
+
+En Linux hibrido, `gpu_device: "dedicated"` fuerza el intento de offload NVIDIA durante la creacion del contexto OpenGL. Si el contexto termina sobre otra GPU, la ejecucion falla en vez de continuar silenciosamente. `auto` respeta el contexto por defecto del sistema e `integrated` evita ese offload y valida que no haya quedado sobre una dedicada.
 
 ### Operadores disponibles
 

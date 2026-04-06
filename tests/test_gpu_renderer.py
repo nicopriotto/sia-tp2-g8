@@ -1,10 +1,21 @@
+import os
+
 import pytest
 import numpy as np
 
-from render.gpu_renderer import GPURenderer, gpu_available
+from render.gpu_renderer import GPURenderer, _classify_device_info, gpu_available
 from genes.triangle_gene import TriangleGene
 
 skip_no_gpu = pytest.mark.skipif(not gpu_available(), reason="GPU no disponible")
+
+
+class FakeContext:
+    def __init__(self, info):
+        self.info = info
+        self.released = False
+
+    def release(self):
+        self.released = True
 
 
 def _fixed_genes():
@@ -92,7 +103,7 @@ def test_gpu_fallback_to_cpu(monkeypatch):
     from render.cpu_renderer import CPURenderer
     from config.config_loader import Config
 
-    monkeypatch.setattr("render.gpu_renderer.gpu_available", lambda: False)
+    monkeypatch.setattr("render.gpu_renderer.gpu_available", lambda preference="auto": False)
 
     config = Config(
         triangle_count=3, population_size=6, max_generations=5,
@@ -101,7 +112,157 @@ def test_gpu_fallback_to_cpu(monkeypatch):
         mutation_methods=["Gen"], mutation_rate=0.1,
         survival_strategy="Aditiva", fitness_function="MSE",
         k_offspring=4, save_every=0, use_gpu=True,
+        gpu_device="auto",
     )
     target = np.ones((10, 10, 4), dtype=np.float32)
     renderer = create_renderer(config, target, 10, 10)
     assert isinstance(renderer, CPURenderer)
+
+
+def test_classify_device_info():
+    assert _classify_device_info({
+        "GL_VENDOR": "NVIDIA Corporation",
+        "GL_RENDERER": "NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2",
+    }) == ("dedicated", "NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2")
+
+    assert _classify_device_info({
+        "GL_VENDOR": "AMD",
+        "GL_RENDERER": "AMD Radeon Graphics (radeonsi, renoir, ACO, DRM 3.57)",
+    }) == ("integrated", "AMD Radeon Graphics (radeonsi, renoir, ACO, DRM 3.57)")
+
+    assert _classify_device_info({
+        "GL_VENDOR": "Intel",
+        "GL_RENDERER": "Mesa Intel(R) UHD Graphics 620",
+    }) == ("integrated", "Mesa Intel(R) UHD Graphics 620")
+
+
+def test_gpu_available_dedicated_activa_prime_offload(monkeypatch):
+    import moderngl
+
+    seen = {}
+
+    def fake_create_standalone_context():
+        seen["prime"] = os.environ.get("__NV_PRIME_RENDER_OFFLOAD")
+        seen["vendor"] = os.environ.get("__GLX_VENDOR_LIBRARY_NAME")
+        return FakeContext({
+            "GL_VENDOR": "NVIDIA Corporation",
+            "GL_RENDERER": "NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2",
+        })
+
+    monkeypatch.delenv("__NV_PRIME_RENDER_OFFLOAD", raising=False)
+    monkeypatch.delenv("__GLX_VENDOR_LIBRARY_NAME", raising=False)
+    monkeypatch.setattr(moderngl, "create_standalone_context", fake_create_standalone_context)
+
+    assert gpu_available("dedicated")
+    assert seen == {"prime": "1", "vendor": "nvidia"}
+    assert os.environ.get("__NV_PRIME_RENDER_OFFLOAD") is None
+    assert os.environ.get("__GLX_VENDOR_LIBRARY_NAME") is None
+
+
+def test_gpu_available_auto_no_activa_prime_offload(monkeypatch):
+    import moderngl
+
+    seen = {}
+
+    def fake_create_standalone_context():
+        seen["prime"] = os.environ.get("__NV_PRIME_RENDER_OFFLOAD")
+        seen["vendor"] = os.environ.get("__GLX_VENDOR_LIBRARY_NAME")
+        return FakeContext({
+            "GL_VENDOR": "NVIDIA Corporation",
+            "GL_RENDERER": "NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2",
+        })
+
+    monkeypatch.delenv("__NV_PRIME_RENDER_OFFLOAD", raising=False)
+    monkeypatch.delenv("__GLX_VENDOR_LIBRARY_NAME", raising=False)
+    monkeypatch.setattr(moderngl, "create_standalone_context", fake_create_standalone_context)
+
+    assert gpu_available("auto")
+    assert seen == {"prime": None, "vendor": None}
+
+
+def test_gpu_available_dedicated_rechaza_renderer_integrado(monkeypatch):
+    import moderngl
+
+    monkeypatch.setattr(
+        moderngl,
+        "create_standalone_context",
+        lambda: FakeContext({
+            "GL_VENDOR": "AMD",
+            "GL_RENDERER": "AMD Radeon Graphics (radeonsi, renoir, ACO, DRM 3.57)",
+        }),
+    )
+
+    assert not gpu_available("dedicated")
+
+
+def test_create_renderer_pasa_gpu_device_al_renderer(monkeypatch):
+    from config.config_loader import Config
+    from main import create_renderer
+
+    class FakeGPURenderer:
+        detect_calls = []
+        init_calls = []
+
+        @staticmethod
+        def detect_device(preference="auto"):
+            FakeGPURenderer.detect_calls.append(preference)
+            return "dedicated: Fake GPU"
+
+        def __init__(self, width, height, target_image, device_preference="auto"):
+            FakeGPURenderer.init_calls.append((width, height, device_preference, target_image.shape))
+
+    availability_calls = []
+
+    monkeypatch.setattr("render.gpu_renderer.GPURenderer", FakeGPURenderer)
+    monkeypatch.setattr(
+        "render.gpu_renderer.gpu_available",
+        lambda preference="auto": availability_calls.append(preference) or True,
+    )
+
+    config = Config(
+        triangle_count=3, population_size=6, max_generations=5,
+        fitness_threshold=2.0, selection_method="Elite",
+        crossover_methods=["OnePoint"], crossover_probability=0.7,
+        mutation_methods=["Gen"], mutation_rate=0.1,
+        survival_strategy="Aditiva", fitness_function="MSE",
+        k_offspring=4, save_every=0, use_gpu=True,
+        gpu_device="dedicated",
+    )
+    target = np.ones((10, 10, 4), dtype=np.float32)
+
+    renderer = create_renderer(config, target, 10, 10)
+
+    assert isinstance(renderer, FakeGPURenderer)
+    assert availability_calls == ["dedicated"]
+    assert FakeGPURenderer.detect_calls == ["dedicated"]
+    assert FakeGPURenderer.init_calls == [(10, 10, "dedicated", (10, 10, 4))]
+
+
+def test_create_renderer_dedicated_falla_sin_fallback(monkeypatch):
+    from config.config_loader import Config
+    from main import create_renderer
+
+    class FakeGPURenderer:
+        @staticmethod
+        def detect_device(preference="auto"):
+            return "integrated: AMD Radeon Graphics"
+
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("No deberia construir GPURenderer cuando dedicated no esta disponible")
+
+    monkeypatch.setattr("render.gpu_renderer.GPURenderer", FakeGPURenderer)
+    monkeypatch.setattr("render.gpu_renderer.gpu_available", lambda preference="auto": False)
+
+    config = Config(
+        triangle_count=3, population_size=6, max_generations=5,
+        fitness_threshold=2.0, selection_method="Elite",
+        crossover_methods=["OnePoint"], crossover_probability=0.7,
+        mutation_methods=["Gen"], mutation_rate=0.1,
+        survival_strategy="Aditiva", fitness_function="MSE",
+        k_offspring=4, save_every=0, use_gpu=True,
+        gpu_device="dedicated",
+    )
+    target = np.ones((10, 10, 4), dtype=np.float32)
+
+    with pytest.raises(RuntimeError, match="GPU dedicada solicitada pero no disponible"):
+        create_renderer(config, target, 10, 10)
