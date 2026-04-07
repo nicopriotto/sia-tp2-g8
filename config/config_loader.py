@@ -47,8 +47,9 @@ class Config:
     gpu_device: str = "auto"
     min_error: float = 0.0  # 0 = desactivado, cualquier valor > 0 actua como criterio de corte
     gene_type: str = "triangle"  # "triangle" | "ellipse"
-    arithmetic_alpha: float = 0.5   # Factor de interpolacion para ArithmeticCrossover
-    gaussian_sigma: float = 0.1     # Sigma para GaussianMutation
+    arithmetic_alpha: float = 0.5      # Factor de interpolacion para ArithmeticCrossover
+    gaussian_sigma: float = 0.1       # Sigma para GaussianMutation (vertices/geometria)
+    gaussian_sigma_color: float = 0.1  # Sigma para GaussianMutation (RGB/alpha), escala [0,1]
     adaptive_operator_weights: bool = False
     adaptive_operator_delta: float = 0.05
     # Campos para seleccion ponderada de operadores
@@ -148,6 +149,7 @@ def load_config(path: str) -> Config:
         gene_type=data.get("gene_type", "triangle"),
         arithmetic_alpha=data.get("arithmetic_alpha", 0.5),
         gaussian_sigma=data.get("gaussian_sigma", 0.1),
+        gaussian_sigma_color=data.get("gaussian_sigma_color", data.get("gaussian_sigma", 0.1)),
         adaptive_operator_weights=data.get("adaptive_operator_weights", False),
         adaptive_operator_delta=data.get("adaptive_operator_delta", 0.05),
         selection_methods=sel_names,
