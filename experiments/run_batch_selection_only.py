@@ -1,19 +1,15 @@
 """
-Runner de corridas masivas para presentacion del TP.
+Runner chico para pruebas rapidas de seleccion.
 
-Ejecuta campañas separadas por familia de operadores:
-- seleccion
-- supervivencia
-- crossover
-- mutacion
+Solo varia el metodo de seleccion (corridas individuales, sin combinaciones).
+Mantiene los mismos parametros fijos del batch principal.
 
-Cada corrida se ejecuta para 1 o mas imagenes objetivo y guarda resultados en:
-output/batches/<batch_id>/<image_name>/<campaign>/<config_slug>/run_seed_<seed>/
+Salida:
+output/batches/<batch_id>/<image_name>/selection/<config_slug>/run_seed_<seed>/
 """
 
 import argparse
 import csv
-import hashlib
 import json
 import logging
 import os
@@ -21,7 +17,6 @@ import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime
-from itertools import combinations
 from pathlib import Path
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -71,21 +66,6 @@ def slugify(value: str) -> str:
     return value.strip("-") or "item"
 
 
-def make_combo_slug(campaign: str, kind: str, methods: list[str]) -> str:
-    method_part = "-".join(slugify(m) for m in methods)
-    raw = f"{campaign}-{kind}-{method_part}"
-    if len(raw) <= 110:
-        return raw
-    digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:8]
-    return f"{campaign}-{kind}-{digest}"
-
-
-def uniform_weights(count: int) -> list[float]:
-    if count <= 0:
-        return []
-    return [1.0 / count] * count
-
-
 def _default_selection_params() -> dict:
     return {
         "boltzmann_t0": 100.0,
@@ -112,117 +92,8 @@ def _default_mutation_params() -> dict:
     }
 
 
-def _build_method_variants(methods: list[str], triple_count: int) -> list[tuple[str, list[str]]]:
-    variants: list[tuple[str, list[str]]] = []
-    seen: set[tuple[str, ...]] = set()
-
-    def _add(kind: str, combo: tuple[str, ...]):
-        if combo in seen:
-            return
-        seen.add(combo)
-        variants.append((kind, list(combo)))
-
-    for method in methods:
-        _add("single", (method,))
-
-    for pair in combinations(methods, 2):
-        _add("pair", pair)
-
-    triple_candidates = list(combinations(methods, 3))
-    for triple in triple_candidates[:max(0, triple_count)]:
-        _add("triple", triple)
-
-    _add("all", tuple(methods))
-    return variants
-
-
-def build_selection_specs() -> list[RunSpec]:
-    specs: list[RunSpec] = []
-    variants = _build_method_variants(VALID_SELECTION_METHODS, triple_count=7)
-    for kind, methods in variants:
-        specs.append(
-            RunSpec(
-                campaign="selection",
-                slug=make_combo_slug("selection", kind, methods),
-                description=f"selection methods {methods}",
-                overrides={
-                    **_default_selection_params(),
-                    "selection_method": methods[0],
-                    "selection_methods": methods,
-                    "selection_weights": uniform_weights(len(methods)),
-                },
-            )
-        )
-    return specs
-
-
-def build_survival_specs() -> list[RunSpec]:
-    specs: list[RunSpec] = []
-    for strategy in VALID_SURVIVAL_STRATEGIES:
-        specs.append(
-            RunSpec(
-                campaign="survival",
-                slug=f"survival-single-{slugify(strategy)}",
-                description=f"survival strategy {strategy}",
-                overrides={"survival_strategy": strategy},
-            )
-        )
-    return specs
-
-
-def build_crossover_specs() -> list[RunSpec]:
-    specs: list[RunSpec] = []
-    variants = _build_method_variants(VALID_CROSSOVER_METHODS, triple_count=4)
-    for kind, methods in variants:
-        specs.append(
-            RunSpec(
-                campaign="crossover",
-                slug=make_combo_slug("crossover", kind, methods),
-                description=f"crossover methods {methods}",
-                overrides={
-                    **_default_crossover_params(),
-                    "crossover_methods": methods,
-                    "crossover_weights": uniform_weights(len(methods)),
-                },
-            )
-        )
-    return specs
-
-
-def build_mutation_specs() -> list[RunSpec]:
-    specs: list[RunSpec] = []
-    variants = _build_method_variants(VALID_MUTATION_METHODS, triple_count=6)
-    for kind, methods in variants:
-        specs.append(
-            RunSpec(
-                campaign="mutation",
-                slug=make_combo_slug("mutation", kind, methods),
-                description=f"mutation methods {methods}",
-                overrides={
-                    **_default_mutation_params(),
-                    "mutation_methods": methods,
-                    "mutation_weights": uniform_weights(len(methods)),
-                },
-            )
-        )
-    return specs
-
-
-def build_run_specs(campaigns: set[str]) -> list[RunSpec]:
-    specs: list[RunSpec] = []
-    if "selection" in campaigns:
-        specs.extend(build_selection_specs())
-    if "survival" in campaigns:
-        specs.extend(build_survival_specs())
-    if "crossover" in campaigns:
-        specs.extend(build_crossover_specs())
-    if "mutation" in campaigns:
-        specs.extend(build_mutation_specs())
-    return specs
-
-
-def _fixed_config_for_campaign(campaign: str) -> dict:
-    fixed = {
+def _fixed_non_selection_config() -> dict:
+    return {
         **_default_selection_params(),
         **_default_crossover_params(),
         **_default_mutation_params(),
@@ -236,24 +107,35 @@ def _fixed_config_for_campaign(campaign: str) -> dict:
         "survival_strategy": "Aditiva",
     }
 
-    # La campaña de supervivencia evalua solo la estrategia de supervivencia
-    # con el resto fijo.
-    if campaign == "survival":
-        return fixed
 
-    return fixed
+def build_selection_specs() -> list[RunSpec]:
+    specs: list[RunSpec] = []
+    for method in VALID_SELECTION_METHODS:
+        specs.append(
+            RunSpec(
+                campaign="selection",
+                slug=f"selection-single-{slugify(method)}",
+                description=f"selection method {method}",
+                overrides={
+                    **_default_selection_params(),
+                    "selection_method": method,
+                    "selection_methods": [method],
+                    "selection_weights": [1.0],
+                },
+            )
+        )
+    return specs
 
 
 def load_base_config(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-    return data
+        return json.load(f)
 
 
 def build_effective_config(base_config: dict, spec: RunSpec) -> dict:
     config = dict(base_config)
     config.update(FORCED_GLOBAL_OVERRIDES)
-    config.update(_fixed_config_for_campaign(spec.campaign))
+    config.update(_fixed_non_selection_config())
     config.update(spec.overrides)
     return config
 
@@ -267,7 +149,7 @@ def write_supported_options(batch_root: Path, config_count: int) -> None:
         "fitness_functions": VALID_FITNESS_FUNCTIONS,
         "forced_overrides": FORCED_GLOBAL_OVERRIDES,
         "generated_config_count": config_count,
-        "notes": "selection/crossover/mutation incluyen individuales, pares, subset de triples y combinacion total.",
+        "notes": "solo seleccion individual (sin combinaciones).",
     }
     out_path = batch_root / "supported_config_options.json"
     with out_path.open("w", encoding="utf-8") as f:
@@ -279,12 +161,12 @@ def run_batch(
     base_config_path: Path,
     output_root: Path,
     seed: int,
-    campaigns: set[str],
     dry_run: bool = False,
 ) -> int:
     base_config = load_base_config(base_config_path)
-    specs = build_run_specs(campaigns)
-    batch_id = datetime.now().strftime("batch_%Y%m%d_%H%M%S")
+    specs = build_selection_specs()
+
+    batch_id = datetime.now().strftime("selection_only_%Y%m%d_%H%M%S")
     batch_root = output_root / batch_id
     batch_root.mkdir(parents=True, exist_ok=True)
 
@@ -390,17 +272,6 @@ def run_batch(
     return 0
 
 
-def parse_campaigns(raw: str) -> set[str]:
-    if not raw:
-        return {"selection", "survival", "crossover", "mutation"}
-    campaigns = {slugify(part).replace("-", "_") for part in raw.split(",")}
-    valid = {"selection", "survival", "crossover", "mutation"}
-    invalid = campaigns - valid
-    if invalid:
-        raise ValueError(f"Campañas invalidas: {sorted(invalid)}. Opciones: {sorted(valid)}")
-    return campaigns
-
-
 def validate_images(images: list[str]) -> list[Path]:
     if len(images) < 1:
         raise ValueError("Debes pasar al menos 1 imagen con --images.")
@@ -417,7 +288,7 @@ def validate_images(images: list[str]) -> list[Path]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Ejecuta un batch grande de corridas por seleccion/supervivencia/crossover/mutacion sobre 1 o mas imagenes."
+        description="Ejecuta un batch chico variando solo metodos de seleccion (sin combinaciones)."
     )
     parser.add_argument(
         "--images",
@@ -442,11 +313,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Seed unica para todas las corridas.",
     )
     parser.add_argument(
-        "--campaigns",
-        default="selection,survival,crossover,mutation",
-        help="Campañas separadas por coma. Opciones: selection,survival,crossover,mutation",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="No ejecuta GA; solo genera manifest y estructura de corrida.",
@@ -460,8 +326,6 @@ def main(argv: list[str] | None = None) -> int:
     if not base_config_path.exists():
         raise FileNotFoundError(f"No existe base-config: {base_config_path}")
 
-    campaigns = parse_campaigns(args.campaigns)
-
     output_root = Path(args.output_root).expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -470,7 +334,6 @@ def main(argv: list[str] | None = None) -> int:
         base_config_path=base_config_path,
         output_root=output_root,
         seed=args.seed,
-        campaigns=campaigns,
         dry_run=args.dry_run,
     )
 

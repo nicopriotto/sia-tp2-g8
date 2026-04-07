@@ -221,17 +221,28 @@ python3 -m experiments.exp_corte
 python3 -m experiments.exp_ponderado
 ```
 
-Batch grande para presentacion (3 imagenes, campañas separadas por operador):
+Batch grande para presentacion (1 o mas imagenes, campañas separadas por operador):
 
 ```bash
 python3 -m experiments.run_batch_tp \
-  --images /ruta/img_simple.png /ruta/img_media.png /ruta/img_compleja.png \
+  --images /ruta/img_objetivo.png \
   --base-config run_configs/config.json \
   --seed 42
 ```
 
-Este runner fuerza en todas las corridas: `max_generations=15000`, `fitness_function=LinearMSE`, `save_every=100`, `max_seconds=0`.
+Este runner fuerza en todas las corridas: `max_generations=15000`, `fitness_function=LinearMSE`, `save_every=100`, `max_seconds=0`, `triangle_count=700`, `elite_count=0` (elitismo desactivado).
 Las salidas se guardan en `output/batches/<batch_id>/<imagen>/<campania>/<config_slug>/run_seed_xxxx/` y se genera `manifest.csv` en la raiz del batch.
+
+Batch chico para pruebas rapidas (solo seleccion, sin combinaciones):
+
+```bash
+python3 -m experiments.run_batch_selection_only \
+  --images /ruta/img_objetivo.png \
+  --base-config run_configs/config.json \
+  --seed 42
+```
+
+Este runner mantiene los mismos parametros fijos del batch grande y solo varia `selection_method` en corridas individuales (7 por imagen).
 
 Los resultados se guardan en `experiments/results/` y los graficos generados en `experiments/plots/`.
 
