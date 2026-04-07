@@ -13,45 +13,54 @@ class GaussianMutation(MutationOperator):
     """
 
     def __init__(self, mutation_rate: float, sigma: float = 0.1, sigma_color: float = None,
-                 decay_b: float = 0.0):
+                 decay_b: float = 0.0, swap_rate: float = 0.0):
         self.mutation_rate = mutation_rate
         self.sigma = sigma
         self.sigma_color = sigma_color if sigma_color is not None else sigma
         self.decay_b = decay_b
+        self.swap_rate = swap_rate
 
     def mutate(self, individual: Individual, generation: int, max_generations: int) -> Individual:
         """Aplica mutacion gaussiana a los genes del individuo."""
         n_genes = individual.genes.shape[0]
         mask = np.random.random(n_genes) < self.mutation_rate
-
-        if not mask.any():
-            return individual.copy()
-
-        # Calcular sigma efectivo con decay temporal
-        if self.decay_b > 0 and max_generations > 0:
-            progress = generation / max_generations
-            decay = (1.0 - progress) ** self.decay_b
-            sigma = self.sigma * decay
-            sigma_color = self.sigma_color * decay
-        else:
-            sigma = self.sigma
-            sigma_color = self.sigma_color
-
         mutated = individual.copy()
-        n_mutated = int(mask.sum())
+        changed = False
 
-        # Geometria (columnas 0-5): sigma en espacio [0, 1]
-        noise = np.zeros((n_mutated, gene_layout.N_COLS))
-        noise[:, :6] = np.random.normal(0, sigma, size=(n_mutated, 6))
-        # RGB (columnas 6-8): sigma_color en [0, 1], convertido a escala [0, 255]
-        noise[:, 6:9] = np.random.normal(0, sigma_color * 255, size=(n_mutated, 3))
-        # Alpha (columna 9): sigma_color en [0, 1]
-        noise[:, 9] = np.random.normal(0, sigma_color, size=n_mutated)
-        # active (columna 10) y padding ellipse (columna 5) no se perturban
-        if mutated.gene_type == "ellipse":
-            noise[:, 5] = 0.0
+        if mask.any():
+            # Calcular sigma efectivo con decay temporal
+            if self.decay_b > 0 and max_generations > 0:
+                progress = generation / max_generations
+                decay = (1.0 - progress) ** self.decay_b
+                sigma = self.sigma * decay
+                sigma_color = self.sigma_color * decay
+            else:
+                sigma = self.sigma
+                sigma_color = self.sigma_color
 
-        mutated.genes[mask] += noise
-        gene_layout.clamp(mutated.genes, mutated.gene_type)
-        mutated.fitness_valid = False
+            n_mutated = int(mask.sum())
+
+            # Geometria (columnas 0-5): sigma en espacio [0, 1]
+            noise = np.zeros((n_mutated, gene_layout.N_COLS))
+            noise[:, :6] = np.random.normal(0, sigma, size=(n_mutated, 6))
+            # RGB (columnas 6-8): sigma_color en [0, 1], convertido a escala [0, 255]
+            noise[:, 6:9] = np.random.normal(0, sigma_color * 255, size=(n_mutated, 3))
+            # Alpha (columna 9): sigma_color en [0, 1]
+            noise[:, 9] = np.random.normal(0, sigma_color, size=n_mutated)
+            # active (columna 10) y padding ellipse (columna 5) no se perturban
+            if mutated.gene_type == "ellipse":
+                noise[:, 5] = 0.0
+
+            mutated.genes[mask] += noise
+            gene_layout.clamp(mutated.genes, mutated.gene_type)
+            changed = True
+
+        # Swap de Z-index (independiente de la perturbacion)
+        if self.swap_rate > 0 and n_genes >= 2 and np.random.random() < self.swap_rate:
+            i, j = np.random.choice(n_genes, size=2, replace=False)
+            mutated.genes[[i, j]] = mutated.genes[[j, i]]
+            changed = True
+
+        if changed:
+            mutated.fitness_valid = False
         return mutated

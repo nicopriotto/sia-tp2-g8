@@ -144,6 +144,7 @@ def build_operators(config: Config):
                 sigma=config.gaussian_sigma,
                 sigma_color=config.gaussian_sigma_color,
                 decay_b=config.gaussian_decay_b,
+                swap_rate=config.gaussian_swap_rate,
             ))
         else:
             mutation_ops.append(mut_class(mutation_rate=config.mutation_rate))
