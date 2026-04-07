@@ -21,9 +21,18 @@ class GaussianMutation(MutationOperator):
         self.swap_rate = swap_rate
 
     def mutate(self, individual: Individual, generation: int, max_generations: int) -> Individual:
-        """Aplica mutacion gaussiana a los genes del individuo."""
+        """Aplica mutacion gaussiana per-float a los genes del individuo."""
         n_genes = individual.genes.shape[0]
-        mask = np.random.random(n_genes) < self.mutation_rate
+
+        # Mascara per-float: shape (n_genes, N_COLS)
+        mask = np.random.random((n_genes, gene_layout.N_COLS)) < self.mutation_rate
+
+        # Nunca mutar columna 10 (active)
+        mask[:, 10] = False
+        # Nunca mutar columna 5 (padding) para ellipses
+        if individual.gene_type == "ellipse":
+            mask[:, 5] = False
+
         mutated = individual.copy()
         changed = False
 
@@ -38,20 +47,14 @@ class GaussianMutation(MutationOperator):
                 sigma = self.sigma
                 sigma_color = self.sigma_color
 
-            n_mutated = int(mask.sum())
+            # Generar ruido con escala apropiada por columna
+            noise = np.zeros_like(mutated.genes)
+            noise[:, :6] = np.random.normal(0, sigma, size=(n_genes, 6))
+            noise[:, 6:9] = np.random.normal(0, sigma_color * 255, size=(n_genes, 3))
+            noise[:, 9] = np.random.normal(0, sigma_color, size=n_genes)
 
-            # Geometria (columnas 0-5): sigma en espacio [0, 1]
-            noise = np.zeros((n_mutated, gene_layout.N_COLS))
-            noise[:, :6] = np.random.normal(0, sigma, size=(n_mutated, 6))
-            # RGB (columnas 6-8): sigma_color en [0, 1], convertido a escala [0, 255]
-            noise[:, 6:9] = np.random.normal(0, sigma_color * 255, size=(n_mutated, 3))
-            # Alpha (columna 9): sigma_color en [0, 1]
-            noise[:, 9] = np.random.normal(0, sigma_color, size=n_mutated)
-            # active (columna 10) y padding ellipse (columna 5) no se perturban
-            if mutated.gene_type == "ellipse":
-                noise[:, 5] = 0.0
-
-            mutated.genes[mask] += noise
+            # Aplicar ruido solo donde la mascara es True
+            mutated.genes[mask] += noise[mask]
             gene_layout.clamp(mutated.genes, mutated.gene_type)
             changed = True
 

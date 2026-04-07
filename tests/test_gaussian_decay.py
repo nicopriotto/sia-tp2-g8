@@ -68,10 +68,10 @@ class TestGaussianDecay:
         np.testing.assert_array_almost_equal(result.genes, ind.genes)
 
     def test_decay_does_not_affect_mutation_rate(self):
-        """El decay solo afecta magnitud, no la probabilidad de seleccion."""
+        """El decay solo afecta magnitud, no la probabilidad de seleccion per-float."""
         mut = GaussianMutation(mutation_rate=0.5, sigma=0.5, decay_b=2.0)
 
-        # Contar cuantos genes mutan en gen temprana vs tardia
+        # Contar cuantos floats individuales mutan (columna 0 solamente)
         count_early = 0
         count_late = 0
         trials = 200
@@ -80,13 +80,12 @@ class TestGaussianDecay:
         for _ in range(trials):
             ind = _make_individual(n_genes)
             result = mut.mutate(ind, generation=0, max_generations=100)
-            count_early += np.any(result.genes[:, :6] != ind.genes[:, :6], axis=1).sum()
+            count_early += (result.genes[:, 0] != ind.genes[:, 0]).sum()
 
         for _ in range(trials):
             ind = _make_individual(n_genes)
             result = mut.mutate(ind, generation=90, max_generations=100)
-            # Los cambios son minusculos pero no exactamente cero (sigma > 0)
-            count_late += np.any(result.genes[:, :6] != ind.genes[:, :6], axis=1).sum()
+            count_late += (result.genes[:, 0] != ind.genes[:, 0]).sum()
 
         rate_early = count_early / (trials * n_genes)
         rate_late = count_late / (trials * n_genes)
