@@ -15,6 +15,8 @@ VALID_SURVIVAL_STRATEGIES = ["Aditiva", "Exclusiva"]
 
 VALID_FITNESS_FUNCTIONS = ["MSE", "MAE", "GMSD", "Oklab", "MSSSIM", "FSIM", "SSIM", "LinearMSE"]
 
+VALID_ISLAND_TOPOLOGIES = ["ring", "fully_connected"]
+
 
 @dataclass
 class Config:
@@ -56,6 +58,13 @@ class Config:
     elite_count: int = 1
     adaptive_operator_weights: bool = False
     adaptive_operator_delta: float = 0.05
+    # Island Model
+    island_enabled: bool = False
+    island_count: int = 5
+    island_migration_interval: int = 50
+    island_migration_count: int = 2
+    island_topology: str = "ring"
+    island_configs: list[dict] = field(default_factory=list)
     # Campos para seleccion ponderada de operadores
     selection_methods: list[str] = field(default_factory=list)
     selection_weights: list[float] = field(default_factory=list)
@@ -121,6 +130,14 @@ def load_config(path: str) -> Config:
     mut_raw = data.get("mutation_methods", ["Gen"])
     mut_names, mut_weights = parse_weighted_methods(mut_raw)
 
+    # Island Model
+    island_enabled = data.get("island_enabled", False)
+    island_count = data.get("island_count", 5)
+    island_migration_interval = data.get("island_migration_interval", 50)
+    island_migration_count = data.get("island_migration_count", 2)
+    island_topology = data.get("island_topology", "ring")
+    island_configs = data.get("island_configs", [])
+
     config = Config(
         triangle_count=data["triangle_count"],
         population_size=data["population_size"],
@@ -160,6 +177,12 @@ def load_config(path: str) -> Config:
         elite_count=data.get("elite_count", 1),
         adaptive_operator_weights=data.get("adaptive_operator_weights", False),
         adaptive_operator_delta=data.get("adaptive_operator_delta", 0.05),
+        island_enabled=island_enabled,
+        island_count=island_count,
+        island_migration_interval=island_migration_interval,
+        island_migration_count=island_migration_count,
+        island_topology=island_topology,
+        island_configs=island_configs,
         selection_methods=sel_names,
         selection_weights=sel_weights,
         crossover_weights=cx_weights,
@@ -231,3 +254,36 @@ def _validate_config(config: Config) -> None:
         raise ValueError(
             f"gene_type '{config.gene_type}' no es valido. Opciones: {valid_gene_types}"
         )
+
+    if config.island_enabled:
+        if config.island_count < 2:
+            raise ValueError(
+                f"island_count debe ser >= 2 cuando island_enabled es true, "
+                f"recibido: {config.island_count}"
+            )
+        if config.island_migration_interval < 1:
+            raise ValueError(
+                f"island_migration_interval debe ser >= 1, "
+                f"recibido: {config.island_migration_interval}"
+            )
+        if config.island_migration_count < 1:
+            raise ValueError(
+                f"island_migration_count debe ser >= 1, "
+                f"recibido: {config.island_migration_count}"
+            )
+        if config.island_migration_count >= config.population_size:
+            raise ValueError(
+                f"island_migration_count ({config.island_migration_count}) "
+                f"debe ser menor que population_size ({config.population_size})"
+            )
+        if config.island_topology not in VALID_ISLAND_TOPOLOGIES:
+            raise ValueError(
+                f"island_topology '{config.island_topology}' no es valido. "
+                f"Opciones: {VALID_ISLAND_TOPOLOGIES}"
+            )
+        if config.island_configs:
+            if len(config.island_configs) != config.island_count:
+                raise ValueError(
+                    f"island_configs tiene {len(config.island_configs)} entradas "
+                    f"pero island_count es {config.island_count}. Deben coincidir."
+                )
