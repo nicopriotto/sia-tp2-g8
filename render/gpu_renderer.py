@@ -118,7 +118,9 @@ def _create_validated_context(preference: str = "auto"):
     import moderngl
 
     with _temporary_env(_context_env_overrides(preference)):
-        ctx = moderngl.create_standalone_context()
+        backend = os.environ.get("MODERNGL_BACKEND")
+        kwargs = {"backend": backend} if backend else {}
+        ctx = moderngl.create_standalone_context(**kwargs)
 
     device_type, renderer_name = _classify_device_info(ctx.info)
     try:
