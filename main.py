@@ -199,13 +199,23 @@ def create_renderer(config: Config, target_image: np.ndarray, width: int, height
 
 
 def _build_island(
-    config: Config,
+    base_config: Config,
     target_image: np.ndarray,
     width: int,
     height: int,
     island_index: int,
+    overrides: dict | None = None,
 ) -> GeneticAlgorithm:
     """Crea una instancia de GeneticAlgorithm para una isla."""
+    if overrides:
+        from config.config_loader import apply_island_overrides
+        config = apply_island_overrides(base_config, overrides)
+        name = overrides.get("name", f"island_{island_index}")
+        logger.info("Isla %d (%s): config con overrides %s", island_index, name, list(overrides.keys()))
+    else:
+        config = base_config
+        name = f"island_{island_index}"
+
     renderer = create_renderer(config, target_image, width, height)
     selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
     context = GAContext(generation=0, max_generations=config.max_generations)
@@ -227,7 +237,7 @@ def _build_island(
         mutation_ops=mutation_ops,
         survival=survival,
         context=context,
-        output_dir=f"output/island_{island_index}",
+        output_dir=f"output/{name}",
     )
 
 
@@ -241,8 +251,9 @@ def run_from_paths(image_path: str, config_path: str):
     height, width = target.shape[0], target.shape[1]
 
     if config.island_enabled:
+        island_overrides = config.island_configs if config.island_configs else [None] * config.island_count
         islands = [
-            _build_island(config, target, width, height, i)
+            _build_island(config, target, width, height, i, overrides=island_overrides[i])
             for i in range(config.island_count)
         ]
         island_ga = IslandGeneticAlgorithm(

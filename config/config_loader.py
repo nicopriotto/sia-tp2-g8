@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 VALID_SELECTION_METHODS = [
@@ -287,3 +287,70 @@ def _validate_config(config: Config) -> None:
                     f"island_configs tiene {len(config.island_configs)} entradas "
                     f"pero island_count es {config.island_count}. Deben coincidir."
                 )
+
+
+_ISLAND_GLOBAL_FIELDS = {
+    "island_enabled", "island_count", "island_migration_interval",
+    "island_migration_count", "island_topology", "island_configs",
+    "max_generations", "fitness_threshold",
+}
+
+
+def apply_island_overrides(base_config: Config, overrides: dict) -> Config:
+    """Crea una copia del Config base con los overrides aplicados.
+
+    Args:
+        base_config: Config base del que se heredan todos los campos.
+        overrides: Dict con campos a sobreescribir. Solo acepta campos
+                   validos de Config (excepto los globales del island model).
+                   El campo "name" se ignora (es solo para logging).
+
+    Returns:
+        Nuevo Config con los overrides aplicados.
+
+    Raises:
+        ValueError: Si un campo no existe en Config o es un campo global.
+    """
+    overrides_clean = {k: v for k, v in overrides.items() if k != "name"}
+
+    valid_fields = {f.name for f in fields(Config)}
+
+    for key in overrides_clean:
+        if key in _ISLAND_GLOBAL_FIELDS:
+            raise ValueError(
+                f"Campo '{key}' no se puede overridear por isla "
+                f"(es un campo global del island model)"
+            )
+        if key not in valid_fields:
+            raise ValueError(
+                f"Campo '{key}' no existe en Config. "
+                f"Campos validos: {sorted(valid_fields - _ISLAND_GLOBAL_FIELDS)}"
+            )
+
+    base_dict = asdict(base_config)
+    base_dict.update(overrides_clean)
+
+    # Re-parsear campos de operadores que necesitan normalizacion de pesos
+    if "selection_methods" in overrides_clean or "selection_method" in overrides_clean:
+        if "selection_methods" in overrides_clean:
+            sel_names, sel_weights = parse_weighted_methods(overrides_clean["selection_methods"])
+            base_dict["selection_methods"] = sel_names
+            base_dict["selection_weights"] = sel_weights
+            base_dict["selection_method"] = sel_names[0]
+        elif "selection_method" in overrides_clean:
+            base_dict["selection_methods"] = [overrides_clean["selection_method"]]
+            base_dict["selection_weights"] = [1.0]
+
+    if "crossover_methods" in overrides_clean:
+        cx_names, cx_weights = parse_weighted_methods(overrides_clean["crossover_methods"])
+        base_dict["crossover_methods"] = cx_names
+        base_dict["crossover_weights"] = cx_weights
+
+    if "mutation_methods" in overrides_clean:
+        mut_names, mut_weights = parse_weighted_methods(overrides_clean["mutation_methods"])
+        base_dict["mutation_methods"] = mut_names
+        base_dict["mutation_weights"] = mut_weights
+
+    new_config = Config(**base_dict)
+    _validate_config(new_config)
+    return new_config
