@@ -204,6 +204,16 @@ class GeneticAlgorithm:
 
             previous_best_fitness = population.best.fitness
 
+            # Elitismo: copiar los top-N antes de generar offspring
+            elite_count = min(config.elite_count, len(population.individuals) - 1)
+            if elite_count > 0:
+                sorted_by_fitness = sorted(
+                    population.individuals, key=lambda i: i.fitness, reverse=True
+                )
+                elite = [ind.copy() for ind in sorted_by_fitness[:elite_count]]
+            else:
+                elite = []
+
             selection_index, selector = self._choose_operator_indexed(
                 self.selection_ops,
                 self.selection_weights,
@@ -241,6 +251,14 @@ class GeneticAlgorithm:
                     child.compute_fitness(target, renderer, fitness_fn)
 
             population = self.survival.apply(population, children, selector)
+
+            # Inyectar elite si se perdieron en la supervivencia
+            if elite:
+                population.individuals.sort(key=lambda i: i.fitness)
+                for elite_ind in elite:
+                    if elite_ind.fitness > population.individuals[0].fitness:
+                        population.individuals[0] = elite_ind
+                        population.individuals.sort(key=lambda i: i.fitness)
 
             if self.adaptive_operator_weights:
                 improved = population.best.fitness > previous_best_fitness
