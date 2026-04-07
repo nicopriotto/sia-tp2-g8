@@ -141,7 +141,7 @@ Todos los archivos se generan en la carpeta `output/`:
 |---|---|
 | `output/final.png` | Mejor imagen generada al finalizar |
 | `output/triangles.json` | Genes del mejor individuo serializados con metadatos |
-| `output/metrics.csv` | Metricas por generacion: best_fitness, avg_fitness, fitness_std, elapsed_seconds |
+| `output/metrics.csv` | Metricas por generacion: best_fitness, avg_fitness, fitness_std, elapsed_seconds, generation_seconds y `log_line` |
 | `output/gen_XXXX.png` | Snapshots intermedios cada `save_every` generaciones |
 
 ## Ejemplo de config.json
@@ -220,6 +220,18 @@ python3 -m experiments.exp_corte
 # Experimento de operadores ponderados
 python3 -m experiments.exp_ponderado
 ```
+
+Batch grande para presentacion (3 imagenes, campañas separadas por operador):
+
+```bash
+python3 -m experiments.run_batch_tp \
+  --images /ruta/img_simple.png /ruta/img_media.png /ruta/img_compleja.png \
+  --base-config run_configs/config.json \
+  --seed 42
+```
+
+Este runner fuerza en todas las corridas: `max_generations=15000`, `fitness_function=LinearMSE`, `save_every=100`, `max_seconds=0`.
+Las salidas se guardan en `output/batches/<batch_id>/<imagen>/<campania>/<config_slug>/run_seed_xxxx/` y se genera `manifest.csv` en la raiz del batch.
 
 Los resultados se guardan en `experiments/results/` y los graficos generados en `experiments/plots/`.
 

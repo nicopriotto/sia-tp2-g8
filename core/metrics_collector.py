@@ -23,9 +23,28 @@ class MetricsCollector:
         os.makedirs(self.output_dir, exist_ok=True)
         with open(f"{self.output_dir}/metrics.csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["generation", "best_fitness", "avg_fitness", "fitness_std", "elapsed_seconds"])
+            writer.writerow([
+                "generation",
+                "best_fitness",
+                "avg_fitness",
+                "fitness_std",
+                "elapsed_seconds",
+                "generation_seconds",
+                "log_line",
+            ])
 
-    def log_generation(self, generation: int, population: Population, elapsed_seconds: float) -> None:
+    def log_generation(
+        self,
+        generation: int,
+        population: Population,
+        elapsed_seconds: float,
+        generation_seconds: float = 0.0,
+    ) -> None:
+        log_line = (
+            f"| Gen {generation} | Best: {population.best.fitness:.4f} | "
+            f"Avg: {population.average_fitness:.4f} | "
+            f"Std: {population.fitness_std:.4f} | Time: {generation_seconds:.1f}s"
+        )
         with open(f"{self.output_dir}/metrics.csv", "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -34,6 +53,8 @@ class MetricsCollector:
                 population.average_fitness,
                 population.fitness_std,
                 round(elapsed_seconds, 3),
+                round(generation_seconds, 3),
+                log_line,
             ])
 
     def save_snapshot(self, generation: int, best_individual: Individual) -> None:

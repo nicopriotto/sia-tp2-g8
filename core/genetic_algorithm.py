@@ -159,7 +159,8 @@ class GeneticAlgorithm:
             population = Population.random(config.population_size, config.triangle_count, gene_type)
         population.evaluate_all(self.target_image, self.renderer, self.fitness_fn)
 
-        collector.log_generation(0, population, time.time() - start_time)
+        init_elapsed = time.time() - start_time
+        collector.log_generation(0, population, init_elapsed, generation_seconds=init_elapsed)
         collector.save_snapshot(0, population.best)
 
         logger.info(
@@ -284,11 +285,16 @@ class GeneticAlgorithm:
 
             best_fitness_history.append(population.best.fitness)
 
-            elapsed = time.time() - start_time
-            collector.log_generation(generation, population, elapsed)
             collector.save_snapshot(generation, population.best)
-
             generation_time = time.time() - generation_start
+            elapsed = time.time() - start_time
+            collector.log_generation(
+                generation,
+                population,
+                elapsed,
+                generation_seconds=generation_time,
+            )
+
             logger.info(
                 "Gen %d | Best: %.4f | Avg: %.4f | Std: %.4f | Time: %.1fs",
                 generation,
