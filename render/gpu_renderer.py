@@ -333,12 +333,15 @@ class GPURenderer(Renderer):
         return self._compute_fitness_error(fitness_type)
 
     def _compute_fitness_error(self, fitness_type: str) -> float:
-        """Pipeline MSE/MAE: error por pixel → reduccion → 1/(1+error)."""
+        """Pipeline MSE/MAE/LinearMSE: error por pixel → reduccion → transformacion."""
         self.error_fbo.use()
         self.ctx.viewport = (0, 0, self.width, self.height)
         self.ctx.clear(0.0, 0.0, 0.0, 0.0)
 
-        program = self.fitness_mse_program if fitness_type == "mse" else self.fitness_mae_program
+        if fitness_type in ("mse", "linear_mse"):
+            program = self.fitness_mse_program
+        else:
+            program = self.fitness_mae_program
 
         self.render_texture.use(location=0)
         self.target_texture.use(location=1)
@@ -353,7 +356,10 @@ class GPURenderer(Renderer):
         vao.release()
 
         mean_val = self._reduce(self.error_texture, self.reduction_levels)
-        fitness = 1.0 / (1.0 + mean_val)
+        if fitness_type == "linear_mse":
+            fitness = max(1.0 - mean_val, 0.0)
+        else:
+            fitness = 1.0 / (1.0 + mean_val)
         return fitness
 
     def _compute_fitness_ssim(self) -> float:
