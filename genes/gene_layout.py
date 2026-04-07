@@ -44,6 +44,31 @@ def random_genes(gene_type: str, n: int) -> np.ndarray:
     return arr
 
 
+def smart_random_genes(gene_type: str, n: int, target_image: np.ndarray) -> np.ndarray:
+    """Genera genes aleatorios con colores sampleados de la imagen target.
+
+    Las coordenadas y alpha son aleatorias como en random_genes().
+    Los colores RGB se obtienen de pixeles aleatorios de la imagen target.
+
+    Args:
+        gene_type: "triangle" o "ellipse"
+        n: cantidad de genes a generar
+        target_image: imagen target, shape (H, W, 4), float32, [0, 1]
+
+    Returns:
+        Array (n, 11) con genes.
+    """
+    arr = random_genes(gene_type, n)
+
+    h, w = target_image.shape[:2]
+    ys = np.random.randint(0, h, size=n)
+    xs = np.random.randint(0, w, size=n)
+    sampled_rgb = target_image[ys, xs, :3]  # shape (n, 3), float32 en [0, 1]
+
+    arr[:, 6:9] = np.round(sampled_rgb * 255.0)
+    return arr
+
+
 def clamp(arr: np.ndarray, gene_type: str) -> np.ndarray:
     """Clampea valores al rango válido, in-place. Retorna arr."""
     np.nan_to_num(arr, nan=0.0, posinf=1.0, neginf=0.0, copy=False)

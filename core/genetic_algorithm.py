@@ -151,7 +151,12 @@ class GeneticAlgorithm:
         start_time = time.time()
 
         gene_type = getattr(config, 'gene_type', 'triangle')
-        population = Population.random(config.population_size, config.triangle_count, gene_type)
+        if getattr(config, 'smart_init', False):
+            population = Population.smart_random(
+                config.population_size, config.triangle_count, gene_type, self.target_image,
+            )
+        else:
+            population = Population.random(config.population_size, config.triangle_count, gene_type)
         population.evaluate_all(self.target_image, self.renderer, self.fitness_fn)
 
         collector.log_generation(0, population, time.time() - start_time)

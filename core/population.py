@@ -28,6 +28,16 @@ class Population:
         individuals = [Individual.random(n_triangles, gene_type) for _ in range(size)]
         return cls(individuals=individuals)
 
+    @classmethod
+    def smart_random(cls, size: int, n_triangles: int, gene_type: str,
+                     target_image: np.ndarray) -> "Population":
+        """Crea una poblacion con colores sampleados de la imagen target."""
+        individuals = [
+            Individual.smart_random(n_triangles, gene_type, target_image)
+            for _ in range(size)
+        ]
+        return cls(individuals=individuals)
+
     @property
     def best(self) -> Individual:
         """Retorna el individuo con mayor fitness.

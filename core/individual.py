@@ -33,6 +33,12 @@ class Individual:
         genes = gene_layout.random_genes(gene_type, n_triangles)
         return cls(genes=genes, gene_type=gene_type)
 
+    @classmethod
+    def smart_random(cls, n_triangles: int, gene_type: str, target_image: np.ndarray) -> "Individual":
+        """Crea un individuo con genes aleatorios y colores de la imagen target."""
+        genes = gene_layout.smart_random_genes(gene_type, n_triangles, target_image)
+        return cls(genes=genes, gene_type=gene_type)
+
     def copy(self) -> "Individual":
         """Retorna una copia profunda del individuo.
 
