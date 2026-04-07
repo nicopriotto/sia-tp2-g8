@@ -42,6 +42,7 @@ from fitness.oklab import OklabMSEFitness
 from fitness.msssim import MSSSIMFitness
 from fitness.fsim import FSIMFitness
 from fitness.ssim import SSIMFitness
+from fitness.linear_mse import LinearMSEFitness
 
 
 SELECTIONS = {
@@ -84,6 +85,7 @@ FITNESS = {
     "MSSSIM": MSSSIMFitness,
     "FSIM": FSIMFitness,
     "SSIM": SSIMFitness,
+    "LinearMSE": LinearMSEFitness,
 }
 
 
