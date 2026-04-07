@@ -2,6 +2,7 @@ import logging
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -18,6 +19,18 @@ from survival.survival_strategy import SurvivalStrategy
 from core.population import Population
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class EpochState:
+    """Estado acumulado entre epochs de un GeneticAlgorithm."""
+    population: Population
+    best_fitness_history: list[float] = field(default_factory=list)
+    low_diversity_counter: int = 0
+    selection_weight_history: list[list[float]] = field(default_factory=list)
+    mutation_weight_history: list[list[float]] = field(default_factory=list)
+    last_generation: int = 0
+    stop_reason: str | None = None
 
 
 class GeneticAlgorithm:
@@ -170,6 +183,58 @@ class GeneticAlgorithm:
             population.fitness_std,
         )
 
+        state = EpochState(
+            population=population,
+            best_fitness_history=[population.best.fitness],
+        )
+        if self.adaptive_operator_weights:
+            state.selection_weight_history.append(self.selection_weights.copy())
+            state.mutation_weight_history.append(self.mutation_weights.copy())
+
+        state = self.run_epoch(state, 1, config.max_generations + 1, start_time, collector)
+
+        if state.stop_reason is None:
+            state.stop_reason = "generaciones_maximas"
+
+        elapsed_seconds = time.time() - start_time
+
+        collector.save_final_result(state.population.best, config, state.last_generation)
+        collector.save_final_image(state.population.best)
+
+        logger.info("=== FIN ===")
+        logger.info("Motivo de corte: %s", state.stop_reason)
+        logger.info("Mejor fitness final: %.4f", state.population.best.fitness)
+        logger.info("Fitness promedio final: %.4f", state.population.average_fitness)
+        logger.info("Desviacion estandar final: %.4f", state.population.fitness_std)
+
+        return GAResult(
+            best_individual=state.population.best,
+            final_generation=state.last_generation,
+            stop_reason=state.stop_reason,
+            elapsed_seconds=elapsed_seconds,
+            best_fitness_history=state.best_fitness_history,
+            selection_weight_history=state.selection_weight_history,
+            mutation_weight_history=state.mutation_weight_history,
+        )
+
+    def run_epoch(
+        self,
+        state: EpochState,
+        start_gen: int,
+        end_gen: int,
+        start_time: float,
+        collector: MetricsCollector,
+    ) -> EpochState:
+        """Ejecuta generaciones desde start_gen hasta end_gen (exclusive).
+
+        Recibe y retorna un EpochState con todo el estado acumulado.
+        No inicializa poblacion ni guarda resultado final.
+        """
+        config = self.config
+        population = state.population
+        best_fitness_history = state.best_fitness_history
+        low_diversity_counter = state.low_diversity_counter
+
         k_offspring = max(2, int(config.generational_gap * config.population_size))
         if k_offspring % 2 != 0:
             k_offspring += 1
@@ -183,18 +248,7 @@ class GeneticAlgorithm:
 
         executor = ThreadPoolExecutor() if self._parallel else None
 
-        stop_reason: str | None = None
-        last_generation = 0
-        best_fitness_history: list[float] = [population.best.fitness]
-        selection_weight_history: list[list[float]] = []
-        mutation_weight_history: list[list[float]] = []
-        low_diversity_counter = 0
-
-        if self.adaptive_operator_weights:
-            selection_weight_history.append(self.selection_weights.copy())
-            mutation_weight_history.append(self.mutation_weights.copy())
-
-        for generation in range(1, config.max_generations + 1):
+        for generation in range(start_gen, end_gen):
             generation_start = time.time()
 
             if self.context is not None:
@@ -204,8 +258,8 @@ class GeneticAlgorithm:
             if config.max_seconds > 0:
                 elapsed = time.time() - start_time
                 if elapsed >= config.max_seconds:
-                    stop_reason = "tiempo_maximo"
-                    last_generation = generation - 1
+                    state.stop_reason = "tiempo_maximo"
+                    state.last_generation = generation - 1
                     break
 
             previous_best_fitness = population.best.fitness
@@ -280,8 +334,8 @@ class GeneticAlgorithm:
                     improved,
                     self.adaptive_operator_delta,
                 )
-                selection_weight_history.append(self.selection_weights.copy())
-                mutation_weight_history.append(self.mutation_weights.copy())
+                state.selection_weight_history.append(self.selection_weights.copy())
+                state.mutation_weight_history.append(self.mutation_weights.copy())
 
             best_fitness_history.append(population.best.fitness)
 
@@ -304,11 +358,11 @@ class GeneticAlgorithm:
                 generation_time,
             )
 
-            last_generation = generation
+            state.last_generation = generation
 
             # Criterio: fitness threshold
             if population.best.fitness >= config.fitness_threshold:
-                stop_reason = "fitness_alcanzado"
+                state.stop_reason = "fitness_alcanzado"
                 break
 
             # Criterio: error minimo alcanzado
@@ -316,7 +370,7 @@ class GeneticAlgorithm:
                 best = population.best
                 current_error = (1.0 / best.fitness) - 1.0 if best.fitness > 0 else float('inf')
                 if current_error <= config.min_error:
-                    stop_reason = "error_minimo"
+                    state.stop_reason = "error_minimo"
                     logger.info(
                         "Error minimo alcanzado en generacion %d: error=%.6f <= min_error=%.6f",
                         generation, current_error, config.min_error,
@@ -327,7 +381,7 @@ class GeneticAlgorithm:
             if config.content_generations > 0 and len(best_fitness_history) >= config.content_generations:
                 recent = best_fitness_history[-config.content_generations:]
                 if max(recent) - min(recent) < config.content_threshold:
-                    stop_reason = "contenido"
+                    state.stop_reason = "contenido"
                     break
 
             # Criterio: estructura
@@ -337,37 +391,17 @@ class GeneticAlgorithm:
                 else:
                     low_diversity_counter = 0
                 if low_diversity_counter >= config.structure_generations:
-                    stop_reason = "estructura"
+                    state.stop_reason = "estructura"
                     break
 
             # Criterio: generaciones maximas
             if generation >= config.max_generations:
-                stop_reason = "generaciones_maximas"
+                state.stop_reason = "generaciones_maximas"
                 break
 
         if executor is not None:
             executor.shutdown(wait=False)
 
-        if stop_reason is None:
-            stop_reason = "generaciones_maximas"
-
-        elapsed_seconds = time.time() - start_time
-
-        collector.save_final_result(population.best, config, last_generation)
-        collector.save_final_image(population.best)
-
-        logger.info("=== FIN ===")
-        logger.info("Motivo de corte: %s", stop_reason)
-        logger.info("Mejor fitness final: %.4f", population.best.fitness)
-        logger.info("Fitness promedio final: %.4f", population.average_fitness)
-        logger.info("Desviacion estandar final: %.4f", population.fitness_std)
-
-        return GAResult(
-            best_individual=population.best,
-            final_generation=last_generation,
-            stop_reason=stop_reason,
-            elapsed_seconds=elapsed_seconds,
-            best_fitness_history=best_fitness_history,
-            selection_weight_history=selection_weight_history,
-            mutation_weight_history=mutation_weight_history,
-        )
+        state.population = population
+        state.low_diversity_counter = low_diversity_counter
+        return state
