@@ -7,6 +7,7 @@ from PIL import Image
 from config.config_loader import load_config, Config
 from core.ga_context import GAContext
 from core.genetic_algorithm import GeneticAlgorithm
+from core.island_ga import IslandGeneticAlgorithm
 from render.cpu_renderer import CPURenderer
 
 logger = logging.getLogger(__name__)
@@ -197,17 +198,16 @@ def create_renderer(config: Config, target_image: np.ndarray, width: int, height
     return CPURenderer()
 
 
-def run_from_paths(image_path: str, config_path: str):
-    """Carga inputs, ejecuta el GA y guarda los outputs principales."""
-    config = load_config(config_path)
-
-    img = Image.open(image_path).convert("RGBA")
-    target = np.array(img, dtype=np.float32) / 255.0
-
-    height, width = target.shape[0], target.shape[1]
-    renderer = create_renderer(config, target, width, height)
+def _build_island(
+    config: Config,
+    target_image: np.ndarray,
+    width: int,
+    height: int,
+    island_index: int,
+) -> GeneticAlgorithm:
+    """Crea una instancia de GeneticAlgorithm para una isla."""
+    renderer = create_renderer(config, target_image, width, height)
     selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
-
     context = GAContext(generation=0, max_generations=config.max_generations)
 
     for sel in selection_ops:
@@ -217,9 +217,9 @@ def run_from_paths(image_path: str, config_path: str):
         if hasattr(mut, 'context'):
             mut.context = context
 
-    ga = GeneticAlgorithm(
+    return GeneticAlgorithm(
         config=config,
-        target_image=target,
+        target_image=target_image,
         renderer=renderer,
         fitness_fn=fitness,
         selection_ops=selection_ops,
@@ -227,11 +227,60 @@ def run_from_paths(image_path: str, config_path: str):
         mutation_ops=mutation_ops,
         survival=survival,
         context=context,
+        output_dir=f"output/island_{island_index}",
     )
 
-    result = ga.run()
 
-    logging.info("Output guardado en output/final.png y output/triangles.json")
+def run_from_paths(image_path: str, config_path: str):
+    """Carga inputs, ejecuta el GA y guarda los outputs principales."""
+    config = load_config(config_path)
+
+    img = Image.open(image_path).convert("RGBA")
+    target = np.array(img, dtype=np.float32) / 255.0
+
+    height, width = target.shape[0], target.shape[1]
+
+    if config.island_enabled:
+        islands = [
+            _build_island(config, target, width, height, i)
+            for i in range(config.island_count)
+        ]
+        island_ga = IslandGeneticAlgorithm(
+            islands=islands,
+            config=config,
+            target_image=target,
+        )
+        result = island_ga.run()
+        logging.info(
+            "Island Model finalizado. Output en output/island_*/. "
+            "Mejor isla guardada con resultado final."
+        )
+    else:
+        renderer = create_renderer(config, target, width, height)
+        selection_ops, crossover_ops, mutation_ops, survival, fitness = build_operators(config)
+        context = GAContext(generation=0, max_generations=config.max_generations)
+
+        for sel in selection_ops:
+            if hasattr(sel, 'context'):
+                sel.context = context
+        for mut in mutation_ops:
+            if hasattr(mut, 'context'):
+                mut.context = context
+
+        ga = GeneticAlgorithm(
+            config=config,
+            target_image=target,
+            renderer=renderer,
+            fitness_fn=fitness,
+            selection_ops=selection_ops,
+            crossover_ops=crossover_ops,
+            mutation_ops=mutation_ops,
+            survival=survival,
+            context=context,
+        )
+        result = ga.run()
+        logging.info("Output guardado en output/final.png y output/triangles.json")
+
     return result
 
 
