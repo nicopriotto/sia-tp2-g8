@@ -97,10 +97,14 @@ def load_cross_image_data(results_dir: str) -> pd.DataFrame:
 
                     seed = int(seed_dir.replace("seed_", ""))
 
+                    # Fitness en gen 0
+                    fitness_gen0 = df["best_fitness"].iloc[0]
+
                     rows.append({
                         "imagen": img_dir,
                         "config": config_dir,
                         "seed": seed,
+                        "fitness_gen0": fitness_gen0,
                         "fitness_final": final_fitness,
                         "avg_fitness_final": final_avg,
                         "fitness_std_final": final_std,
@@ -198,6 +202,46 @@ def plot_grouped_bars(data: pd.DataFrame, title: str, output_path: str):
     print(f"  Barras agrupadas guardado: {output_path}")
 
 
+def plot_gen0_bars(data: pd.DataFrame, title: str, output_path: str):
+    """Barras agrupadas: fitness en generacion 0 por config, una barra por imagen."""
+    if "fitness_gen0" not in data.columns:
+        return
+
+    summary = data.groupby(["config", "imagen"])["fitness_gen0"].agg(["mean", "std"]).reset_index()
+
+    configs = sorted(data["config"].unique(), key=_natural_sort_key)
+    images = sorted(data["imagen"].unique(), key=_natural_sort_key)
+    n_configs = len(configs)
+    n_images = len(images)
+
+    x = np.arange(n_configs)
+    width = 0.8 / n_images
+    colors = plt.cm.Set2(np.linspace(0, 1, n_images))
+
+    fig, ax = plt.subplots(figsize=(max(10, n_configs * 1.5), 6))
+
+    for i, img in enumerate(images):
+        img_data = summary[summary["imagen"] == img].set_index("config")
+        means = [img_data.loc[c, "mean"] if c in img_data.index else 0 for c in configs]
+        stds = [img_data.loc[c, "std"] if c in img_data.index else 0 for c in configs]
+        ax.bar(x + i * width, means, width, label=img, color=colors[i],
+               yerr=stds, capsize=4, error_kw={"linewidth": 1.5, "capthick": 1.5})
+
+    ax.set_xlabel("Configuracion", fontsize=11)
+    ax.set_ylabel("Fitness en generacion 0", fontsize=11)
+    ax.set_title(f"Fitness inicial (gen 0) en las 4 imagenes\n{title}", fontsize=13)
+    ax.set_xticks(x + width * (n_images - 1) / 2)
+    ax.set_xticklabels(configs, rotation=25, ha="right", fontsize=9)
+    ax.legend(fontsize=9, title="Imagen")
+    ax.grid(True, alpha=0.3, axis="y")
+    plt.tight_layout()
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+    print(f"  Barras gen0 guardado: {output_path}")
+
+
 def save_cross_summary(data: pd.DataFrame, output_path: str):
     """Tabla resumen CSV con fitness y velocidad por config x imagen."""
     summary = data.groupby(["config", "imagen"]).agg(
@@ -243,6 +287,11 @@ def process_experiment(results_dir: str, output_dir: str, exp_name: str):
     plot_grouped_bars(
         data, exp_name,
         os.path.join(output_dir, f"{exp_name}_barras_comparacion.png"),
+    )
+
+    plot_gen0_bars(
+        data, exp_name,
+        os.path.join(output_dir, f"{exp_name}_barras_gen0.png"),
     )
 
     save_cross_summary(
