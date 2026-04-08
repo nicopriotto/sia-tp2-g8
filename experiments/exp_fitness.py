@@ -1,7 +1,8 @@
 """
-Experimento: comparar estrategias de supervivencia.
+Experimento: funciones de fitness.
 
-Compara Aditiva vs Exclusiva en las 4 imagenes principales.
+Compara LinearMSE, MSE, MAE y SSIM en las 4 imagenes principales.
+Nota: SSIM es CPU-only y mas lenta.
 """
 import os
 import sys
@@ -17,29 +18,31 @@ from experiments.run_experiment import (
     apply_common_args,
 )
 
-METHODS = [
-    ("Aditiva", {"survival_strategy": "Aditiva"}),
-    ("Exclusiva", {"survival_strategy": "Exclusiva"}),
+CONFIGS = [
+    ("LinearMSE", {"fitness_function": "LinearMSE"}),
+    ("MSE", {"fitness_function": "MSE"}),
+    ("MAE", {"fitness_function": "MAE"}),
+    ("SSIM", {"fitness_function": "SSIM"}),
 ]
 
-DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "supervivencia")
+DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "fitness")
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 
-    parser = parse_common_args("Experimento de comparacion de estrategias de supervivencia")
+    parser = parse_common_args("Experimento de funciones de fitness")
     args = parser.parse_args()
 
     max_gen, seeds, _ = apply_common_args(args)
     output_base = args.output or DEFAULT_OUTPUT
 
     run_experiment_all_images(
-        name="supervivencia",
-        configs=METHODS,
+        name="fitness",
+        configs=CONFIGS,
         output_base=output_base,
         seeds=seeds,
-        max_generations=max_gen,
+        max_generations=max_gen or 500,
     )
 
     print(f"\nResultados guardados en: {output_base}")

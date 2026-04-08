@@ -1,0 +1,86 @@
+{
+    "triangle_count": 350,
+    "population_size": 50,
+    "max_generations": 1000000,
+    "fitness_threshold": 0.9999,
+    "selection_method": "Boltzmann",
+    "crossover_methods": ["Uniform"],
+    "crossover_probability": 0.85,
+    "mutation_methods": ["Gaussiana"],
+    "mutation_rate": 0.08,
+    "survival_strategy": "Aditiva",
+    "fitness_function": "LinearMSE",
+    "k_offspring": 50,
+    "save_every": 100,
+    "generational_gap": 1.0,
+    "boltzmann_t0": 150.0,
+    "boltzmann_tc": 1.0,
+    "boltzmann_k": 0.008,
+    "gaussian_sigma": 0.12,
+    "gaussian_sigma_color": 0.1,
+    "gaussian_decay_b": 1.5,
+    "gaussian_swap_rate": 0.05,
+    "elite_count": 3,
+    "smart_init": true,
+    "use_gpu": true,
+    "gpu_device": "dedicated",
+    "content_generations": 0,
+    "content_threshold": 0.0001,
+    "max_seconds": 0,
+    "stagnation_check_interval": 200,
+    "stagnation_threshold": 0.0001,
+    "stagnation_mutation_boost": 4.0,
+    "stagnation_replace_pct": 0.2,
+    "island_enabled": true,
+    "island_count": 6,
+    "island_migration_interval": 30,
+    "island_migration_count": 3,
+    "island_topology": "ring",
+    "island_configs": [
+        {
+            "name": "exploradora-agresiva",
+            "mutation_rate": 0.20,
+            "gaussian_sigma": 0.25,
+            "gaussian_sigma_color": 0.15,
+            "selection_method": "Ruleta"
+        },
+        {
+            "name": "exploradora-suave",
+            "mutation_rate": 0.12,
+            "gaussian_sigma": 0.15,
+            "mutation_methods": ["Gaussiana", "MultiGen"],
+            "selection_method": "Universal"
+        },
+        {
+            "name": "conservadora-elite",
+            "mutation_rate": 0.02,
+            "gaussian_sigma": 0.04,
+            "gaussian_sigma_color": 0.05,
+            "gaussian_decay_b": 3.0,
+            "selection_method": "Elite"
+        },
+        {
+            "name": "torneo-agresivo",
+            "mutation_rate": 0.10,
+            "mutation_methods": ["MultiGen", "Gaussiana"],
+            "selection_method": "TorneosDeterministicos",
+            "tournament_m": 8
+        },
+        {
+            "name": "boltzmann-lenta",
+            "mutation_rate": 0.06,
+            "mutation_methods": ["Gaussiana", "NoUniforme"],
+            "selection_method": "Boltzmann",
+            "boltzmann_t0": 300.0,
+            "boltzmann_k": 0.003
+        },
+        {
+            "name": "refinadora-ranking",
+            "mutation_rate": 0.03,
+            "gaussian_sigma": 0.06,
+            "gaussian_decay_b": 4.0,
+            "crossover_methods": ["Aritmetico"],
+            "selection_method": "Ranking"
+        }
+    ]
+}

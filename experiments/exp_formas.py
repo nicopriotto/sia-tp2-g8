@@ -1,7 +1,7 @@
 """
-Experimento: comparar estrategias de supervivencia.
+Experimento: triangulos vs elipses.
 
-Compara Aditiva vs Exclusiva en las 4 imagenes principales.
+Compara gene_type="triangle" vs "ellipse" en las 4 imagenes principales.
 """
 import os
 import sys
@@ -17,26 +17,26 @@ from experiments.run_experiment import (
     apply_common_args,
 )
 
-METHODS = [
-    ("Aditiva", {"survival_strategy": "Aditiva"}),
-    ("Exclusiva", {"survival_strategy": "Exclusiva"}),
+CONFIGS = [
+    ("Triangulo", {"gene_type": "triangle"}),
+    ("Elipse", {"gene_type": "ellipse"}),
 ]
 
-DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "supervivencia")
+DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "formas")
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 
-    parser = parse_common_args("Experimento de comparacion de estrategias de supervivencia")
+    parser = parse_common_args("Experimento de triangulos vs elipses")
     args = parser.parse_args()
 
     max_gen, seeds, _ = apply_common_args(args)
     output_base = args.output or DEFAULT_OUTPUT
 
     run_experiment_all_images(
-        name="supervivencia",
-        configs=METHODS,
+        name="formas",
+        configs=CONFIGS,
         output_base=output_base,
         seeds=seeds,
         max_generations=max_gen,

@@ -12,6 +12,7 @@ Uso:
 """
 import argparse
 import os
+import re
 import sys
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -29,6 +30,18 @@ except ImportError as e:
     sys.exit(1)
 
 
+def _natural_sort_key(name: str):
+    """Ordena configs de forma logica: numeros por valor, texto alfabetico."""
+    parts = re.split(r'(\d+)', name)
+    result = []
+    for part in parts:
+        if part.isdigit():
+            result.append(int(part))
+        else:
+            result.append(part.lower())
+    return result
+
+
 def load_metrics(results_dir: str) -> dict[str, list]:
     """
     Carga todos los metrics.csv de un directorio de resultados.
@@ -41,17 +54,20 @@ def load_metrics(results_dir: str) -> dict[str, list]:
             config_2/
                 seed_42/metrics.csv
 
-    Retorna: {nombre_config: [DataFrame, ...]}
+    Retorna: {nombre_config: [DataFrame, ...]} ordenado logicamente.
     """
     data = {}
     if not os.path.isdir(results_dir):
         print(f"Directorio no encontrado: {results_dir}")
         return data
 
-    for config_dir in sorted(os.listdir(results_dir)):
+    config_dirs = sorted(
+        [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))],
+        key=_natural_sort_key,
+    )
+
+    for config_dir in config_dirs:
         config_path = os.path.join(results_dir, config_dir)
-        if not os.path.isdir(config_path):
-            continue
 
         dfs = []
         for seed_dir in sorted(os.listdir(config_path)):
@@ -87,12 +103,12 @@ def plot_fitness_curves(data: dict, title: str, output_path: str):
         mean = merged.mean()
         std = merged.std().fillna(0)
 
-        plt.plot(mean.index, mean.values, label=label, linewidth=1.5)
+        line, = plt.plot(mean.index, mean.values, label=label, linewidth=1.5)
         plt.fill_between(
             mean.index,
             (mean.values - std.values).clip(0),
             (mean.values + std.values).clip(0, 1),
-            alpha=0.15,
+            alpha=0.25, color=line.get_color(),
         )
 
     plt.xlabel("Generacion", fontsize=12)
@@ -109,7 +125,7 @@ def plot_fitness_curves(data: dict, title: str, output_path: str):
 
 
 def plot_avg_fitness_curves(data: dict, title: str, output_path: str):
-    """Grafica curvas de fitness promedio de la poblacion."""
+    """Grafica curvas de fitness promedio de la poblacion con banda de desvio estandar."""
     if not data:
         print("Sin datos para graficar curvas de fitness promedio.")
         return
@@ -121,12 +137,12 @@ def plot_avg_fitness_curves(data: dict, title: str, output_path: str):
         mean = merged.mean()
         std = merged.std().fillna(0)
 
-        plt.plot(mean.index, mean.values, label=label, linewidth=1.5)
+        line, = plt.plot(mean.index, mean.values, label=label, linewidth=1.5)
         plt.fill_between(
             mean.index,
             (mean.values - std.values).clip(0),
             (mean.values + std.values).clip(0, 1),
-            alpha=0.15,
+            alpha=0.25, color=line.get_color(),
         )
 
     plt.xlabel("Generacion", fontsize=12)
@@ -144,18 +160,19 @@ def plot_avg_fitness_curves(data: dict, title: str, output_path: str):
 
 def create_image_grid(results_dir: str, generations: list[int], output_path: str):
     """
-    Crea un grid de imagenes intermedias.
-    Una fila por configuracion, una columna por generacion.
+    Crea un grid de imagenes intermedias con matplotlib.
+    Una fila por configuracion (ordenada logicamente), una columna por generacion.
+    Labels claros en filas (nombre config) y columnas (generacion).
     Usa la primera seed disponible para cada configuracion.
     """
     if not os.path.isdir(results_dir):
         print(f"Directorio no encontrado: {results_dir}")
         return
 
-    configs = sorted([
-        d for d in os.listdir(results_dir)
-        if os.path.isdir(os.path.join(results_dir, d))
-    ])
+    configs = sorted(
+        [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))],
+        key=_natural_sort_key,
+    )
 
     if not configs:
         print("Sin configuraciones para crear grid de imagenes.")
@@ -173,18 +190,16 @@ def create_image_grid(results_dir: str, generations: list[int], output_path: str
         if not seed_dirs:
             continue
 
-        # Usar la primera seed
         seed_path = os.path.join(config_path, seed_dirs[0])
         row_images = []
 
         for gen in generations:
             img_path = os.path.join(seed_path, f"gen_{gen:04d}.png")
             if not os.path.exists(img_path):
-                # Intentar con final.png si es la ultima generacion
                 img_path = os.path.join(seed_path, "final.png")
 
             if os.path.exists(img_path):
-                row_images.append(Image.open(img_path))
+                row_images.append(np.array(Image.open(img_path)))
             else:
                 row_images.append(None)
 
@@ -194,35 +209,40 @@ def create_image_grid(results_dir: str, generations: list[int], output_path: str
         print("Sin imagenes para crear grid.")
         return
 
-    # Determinar tamano de celda
-    cell_w, cell_h = 100, 100
-    for _, images in rows:
-        for img in images:
-            if img is not None:
-                cell_w, cell_h = img.size
-                break
-
-    n_cols = len(generations)
     n_rows = len(rows)
-    label_width = 200  # espacio para nombre de la configuracion
-    padding = 5
+    n_cols = len(generations)
 
-    grid_w = label_width + n_cols * (cell_w + padding)
-    grid_h = 30 + n_rows * (cell_h + padding)  # 30px para header
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 3 * n_rows))
 
-    grid = Image.new("RGB", (grid_w, grid_h), "white")
+    # Asegurar que axes sea 2D
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    if n_cols == 1:
+        axes = axes.reshape(-1, 1)
 
-    # Componer el grid
     for row_idx, (config_name, images) in enumerate(rows):
-        y = 30 + row_idx * (cell_h + padding)
-        for col_idx, img in enumerate(images):
-            x = label_width + col_idx * (cell_w + padding)
-            if img is not None:
-                img_resized = img.resize((cell_w, cell_h))
-                grid.paste(img_resized, (x, y))
+        for col_idx, img_arr in enumerate(images):
+            ax = axes[row_idx, col_idx]
+            if img_arr is not None:
+                ax.imshow(img_arr)
+            else:
+                ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes)
+            ax.axis("off")
 
+            # Label de columna (generacion) en la primera fila
+            if row_idx == 0:
+                ax.set_title(f"Gen {generations[col_idx]}", fontsize=11, fontweight="bold")
+
+        # Label de fila (config) a la izquierda
+        axes[row_idx, 0].annotate(
+            config_name, xy=(-0.1, 0.5), xycoords="axes fraction",
+            fontsize=10, ha="right", va="center", fontweight="bold",
+        )
+
+    plt.tight_layout()
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    grid.save(output_path)
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
     print(f"Grid de imagenes guardado: {output_path}")
 
 
@@ -280,31 +300,34 @@ def process_experiment(results_dir: str, output_dir: str, experiment_name: str):
         print(f"Sin resultados en {results_dir}")
         return
 
+    # Nombre limpio para archivos: "seleccion - 2_Grecia" -> "seleccion_2_Grecia"
+    safe_name = experiment_name.replace(" - ", "_").replace(" ", "_")
+
     # Curvas de fitness del mejor individuo
     plot_fitness_curves(
         data,
         title=f"Fitness del mejor individuo - {experiment_name}",
-        output_path=os.path.join(output_dir, "fitness_best.png"),
+        output_path=os.path.join(output_dir, f"{safe_name}_fitness_best.png"),
     )
 
     # Curvas de fitness promedio
     plot_avg_fitness_curves(
         data,
         title=f"Fitness promedio - {experiment_name}",
-        output_path=os.path.join(output_dir, "fitness_avg.png"),
+        output_path=os.path.join(output_dir, f"{safe_name}_fitness_avg.png"),
     )
 
     # Grid de imagenes intermedias
     create_image_grid(
         results_dir,
         generations=[0, 50, 200, 500],
-        output_path=os.path.join(output_dir, "image_grid.png"),
+        output_path=os.path.join(output_dir, f"{safe_name}_image_grid.png"),
     )
 
     # Tabla resumen
     create_summary_table(
         data,
-        output_path=os.path.join(output_dir, "summary.csv"),
+        output_path=os.path.join(output_dir, f"{safe_name}_summary.csv"),
     )
 
 

@@ -31,23 +31,45 @@ SEEDS = [42, 123, 456, 789, 1024]
 
 # Configuracion base por defecto para todos los experimentos
 BASE_CONFIG = {
-    "triangle_count": 20,
-    "population_size": 100,
-    "max_generations": 500,
-    "fitness_threshold": 0.99,
-    "selection_method": "Elite",
-    "crossover_methods": ["OnePoint"],
+    "triangle_count": 100,
+    "population_size": 50,
+    "max_generations": 1000,
+    "fitness_threshold": 0.9999,
+    "selection_method": "Boltzmann",
+    "crossover_methods": ["Uniform"],
     "crossover_probability": 0.7,
-    "mutation_methods": ["Gen"],
-    "mutation_rate": 0.1,
+    "mutation_methods": ["Gaussiana"],
+    "mutation_rate": 0.05,
     "survival_strategy": "Aditiva",
-    "fitness_function": "MSE",
+    "fitness_function": "LinearMSE",
     "k_offspring": 50,
     "save_every": 50,
+    "smart_init": True,
+    "use_gpu": True,
+    "gpu_device": "dedicated",
+    "gaussian_sigma": 0.1,
+    "gaussian_sigma_color": 0.08,
+    "gaussian_decay_b": 2.0,
+    "gaussian_swap_rate": 0.05,
+    "elite_count": 2,
+    "boltzmann_t0": 100.0,
+    "boltzmann_tc": 1.0,
+    "boltzmann_k": 0.01,
 }
 
-# Imagen de prueba por defecto
-IMAGE_PATH = os.path.join(PROJECT_ROOT, "images", "test_experiment.png")
+# Seeds reducidas para presentacion (3 seeds = rapido + estadisticamente util)
+SEEDS = [42, 123, 456]
+
+# Imagen por defecto: Grecia (complejidad media)
+IMAGE_PATH = os.path.join(PROJECT_ROOT, "images", "2.jpg")
+
+# Las 4 imagenes principales para correr todos los tests
+ALL_IMAGES = [
+    ("1_Ucrania", os.path.join(PROJECT_ROOT, "images", "1.jpg")),
+    ("2_Grecia", os.path.join(PROJECT_ROOT, "images", "2.jpg")),
+    ("3_Apple", os.path.join(PROJECT_ROOT, "images", "3.jpg")),
+    ("4_Cubista", os.path.join(PROJECT_ROOT, "images", "4.jpg")),
+]
 
 
 def load_target_image(image_path: str) -> np.ndarray:
@@ -155,6 +177,49 @@ def run_experiment(
             except Exception as e:
                 print(f"  ERROR: {e}")
                 logger.exception("Error en corrida %s seed=%d", label, seed)
+
+
+def run_experiment_all_images(
+    name: str,
+    configs: list[tuple[str, dict]],
+    output_base: str,
+    images: list[tuple[str, str]] | None = None,
+    seeds: list[int] | None = None,
+    max_generations: int | None = None,
+):
+    """
+    Ejecuta multiples corridas variando configuraciones en TODAS las imagenes.
+
+    Estructura de salida:
+        output_base/<imagen>/<config>/<seed>/metrics.csv
+
+    Parametros:
+        name: nombre del experimento (para logging)
+        configs: lista de (etiqueta, overrides_dict)
+        output_base: directorio base de resultados
+        images: lista de (etiqueta, ruta) (default: ALL_IMAGES)
+        seeds: lista de seeds a usar (default: SEEDS)
+        max_generations: override de generaciones maximas
+    """
+    if images is None:
+        images = ALL_IMAGES
+    if seeds is None:
+        seeds = SEEDS
+
+    for img_label, image_path in images:
+        for label, overrides in configs:
+            config_dict = {**BASE_CONFIG, **overrides}
+            if max_generations is not None:
+                config_dict["max_generations"] = max_generations
+
+            for seed in seeds:
+                run_dir = os.path.join(output_base, img_label, label, f"seed_{seed}")
+                print(f"[{name}] {img_label}/{label}, seed={seed} -> {run_dir}")
+                try:
+                    run_single(config_dict, image_path, run_dir, seed)
+                except Exception as e:
+                    print(f"  ERROR: {e}")
+                    logger.exception("Error en corrida %s/%s seed=%d", img_label, label, seed)
 
 
 def parse_common_args(description: str):

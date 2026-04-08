@@ -1,7 +1,8 @@
 """
-Experimento: comparar estrategias de supervivencia.
+Experimento: cantidad de triangulos.
 
-Compara Aditiva vs Exclusiva en las 4 imagenes principales.
+Compara distintas cantidades de triangulos (10, 25, 50, 100, 200)
+en las 4 imagenes principales.
 """
 import os
 import sys
@@ -17,26 +18,29 @@ from experiments.run_experiment import (
     apply_common_args,
 )
 
-METHODS = [
-    ("Aditiva", {"survival_strategy": "Aditiva"}),
-    ("Exclusiva", {"survival_strategy": "Exclusiva"}),
+CONFIGS = [
+    ("10_triangulos", {"triangle_count": 10}),
+    ("25_triangulos", {"triangle_count": 25}),
+    ("50_triangulos", {"triangle_count": 50}),
+    ("100_triangulos", {"triangle_count": 100}),
+    ("200_triangulos", {"triangle_count": 200}),
 ]
 
-DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "supervivencia")
+DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "num_triangulos")
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 
-    parser = parse_common_args("Experimento de comparacion de estrategias de supervivencia")
+    parser = parse_common_args("Experimento de cantidad de triangulos")
     args = parser.parse_args()
 
     max_gen, seeds, _ = apply_common_args(args)
     output_base = args.output or DEFAULT_OUTPUT
 
     run_experiment_all_images(
-        name="supervivencia",
-        configs=METHODS,
+        name="num_triangulos",
+        configs=CONFIGS,
         output_base=output_base,
         seeds=seeds,
         max_generations=max_gen,

@@ -3,29 +3,22 @@ Experimento: comparar metodos de seleccion.
 
 Varia el metodo de seleccion manteniendo el resto de hiperparametros fijos.
 Metodos: Elite, Ruleta, Universal, Ranking, Boltzmann, TorneosDeterministicos.
-
-Hipotesis:
-- Ruleta con fitness dispares puede converger prematuramente.
-- Ranking normaliza y resuelve el problema de fitness dispares.
-- Boltzmann permite exploracion temprana y explotacion tardia.
-- Torneos es robusto y facil de parametrizar.
+Corre en las 4 imagenes principales.
 """
 import os
 import sys
 import logging
 
-# Agregar directorio raiz al path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from experiments.run_experiment import (
-    run_experiment,
+    run_experiment_all_images,
     parse_common_args,
     apply_common_args,
 )
 
-# Metodos de seleccion a comparar con sus parametros especificos
 METHODS = [
     ("Elite", {"selection_method": "Elite"}),
     ("Ruleta", {"selection_method": "Ruleta"}),
@@ -44,14 +37,13 @@ def main():
     parser = parse_common_args("Experimento de comparacion de metodos de seleccion")
     args = parser.parse_args()
 
-    max_gen, seeds, image_path = apply_common_args(args)
+    max_gen, seeds, _ = apply_common_args(args)
     output_base = args.output or DEFAULT_OUTPUT
 
-    run_experiment(
+    run_experiment_all_images(
         name="seleccion",
         configs=METHODS,
         output_base=output_base,
-        image_path=image_path,
         seeds=seeds,
         max_generations=max_gen,
     )
