@@ -65,6 +65,11 @@ class Config:
     island_migration_count: int = 2
     island_topology: str = "ring"
     island_configs: list[dict] = field(default_factory=list)
+    # Anti-estancamiento
+    stagnation_check_interval: int = 0       # Cada cuantas gen chequear (0 = desactivado)
+    stagnation_threshold: float = 1e-5       # Mejora minima en el intervalo para no considerarse estancado
+    stagnation_mutation_boost: float = 3.0   # Multiplicador de mutation_rate al detectar estancamiento
+    stagnation_replace_pct: float = 0.2      # Fraccion de la poblacion a reemplazar con individuos nuevos
     # Campos para seleccion ponderada de operadores
     selection_methods: list[str] = field(default_factory=list)
     selection_weights: list[float] = field(default_factory=list)
@@ -177,6 +182,10 @@ def load_config(path: str) -> Config:
         elite_count=data.get("elite_count", 1),
         adaptive_operator_weights=data.get("adaptive_operator_weights", False),
         adaptive_operator_delta=data.get("adaptive_operator_delta", 0.05),
+        stagnation_check_interval=data.get("stagnation_check_interval", 0),
+        stagnation_threshold=data.get("stagnation_threshold", 1e-5),
+        stagnation_mutation_boost=data.get("stagnation_mutation_boost", 3.0),
+        stagnation_replace_pct=data.get("stagnation_replace_pct", 0.2),
         island_enabled=island_enabled,
         island_count=island_count,
         island_migration_interval=island_migration_interval,

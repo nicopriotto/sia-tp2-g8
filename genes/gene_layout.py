@@ -44,11 +44,20 @@ def random_genes(gene_type: str, n: int) -> np.ndarray:
     return arr
 
 
-def smart_random_genes(gene_type: str, n: int, target_image: np.ndarray) -> np.ndarray:
-    """Genera genes aleatorios con colores sampleados de la imagen target.
 
-    Las coordenadas y alpha son aleatorias como en random_genes().
-    Los colores RGB se obtienen de pixeles aleatorios de la imagen target.
+def smart_random_genes(gene_type: str, n: int, target_image: np.ndarray) -> np.ndarray:
+    """Genera genes con inicialización inteligente multi-escala.
+
+    Estrategia:
+    1. Posiciones random (cobertura natural por overlap).
+    2. Ordenados por tamaño: grandes primero (fondo), chicos último
+       (detalle visible encima).
+    3. Color híbrido: las formas grandes (top 60%) usan el color
+       promedio de un parche de la imagen proporcional a su tamaño;
+       las formas chicas (bottom 40%) sampleen varios puntos dentro
+       de la forma y promedian, capturando mejor el detalle local.
+    4. Alpha proporcional al tamaño: grandes semi-transparentes (0.30,
+       se mezclan suavemente), chicos más opacos (0.90, definen detalle).
 
     Args:
         gene_type: "triangle" o "ellipse"
@@ -58,15 +67,71 @@ def smart_random_genes(gene_type: str, n: int, target_image: np.ndarray) -> np.n
     Returns:
         Array (n, 11) con genes.
     """
-    arr = random_genes(gene_type, n)
+    genes = random_genes(gene_type, n)
 
     h, w = target_image.shape[:2]
-    ys = np.random.randint(0, h, size=n)
-    xs = np.random.randint(0, w, size=n)
-    sampled_rgb = target_image[ys, xs, :3]  # shape (n, 3), float32 en [0, 1]
+    max_dim = max(w, h)
 
-    arr[:, 6:9] = np.round(sampled_rgb * 255.0)
-    return arr
+    # --- Calcular tamaño de cada forma ---
+    if gene_type == "triangle":
+        x1, y1 = genes[:, 0], genes[:, 1]
+        x2, y2 = genes[:, 2], genes[:, 3]
+        x3, y3 = genes[:, 4], genes[:, 5]
+        areas = np.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) / 2.0
+    else:  # ellipse
+        areas = math.pi * genes[:, 2] * genes[:, 3]  # π * rx * ry
+
+    # --- Ordenar: grandes primero (fondo), chicos último (detalle) ---
+    order = np.argsort(-areas)
+    genes = genes[order]
+    areas = areas[order]
+
+    # --- Alpha proporcional al tamaño ---
+    norm = (areas - areas.min()) / (areas.max() - areas.min() + 1e-8)
+    genes[:, 9] = 0.90 - norm * 0.60  # chicos ~0.90, grandes ~0.30
+
+    # --- Color híbrido: patch para grandes, multipoint para chicos ---
+    split_idx = int(n * 0.60)
+
+    for i in range(n):
+        if i < split_idx:
+            # Grandes: color promedio de un parche centrado en el centroide
+            if gene_type == "triangle":
+                cx = (genes[i, 0] + genes[i, 2] + genes[i, 4]) / 3.0
+                cy = (genes[i, 1] + genes[i, 3] + genes[i, 5]) / 3.0
+            else:
+                cx, cy = genes[i, 0], genes[i, 1]
+            r_px = max(1, int(math.sqrt(areas[i]) * max_dim * 0.5))
+            cx_i = int(np.clip(cx * w, 0, w - 1))
+            cy_i = int(np.clip(cy * h, 0, h - 1))
+            y0 = max(0, cy_i - r_px)
+            y1_ = min(h, cy_i + r_px + 1)
+            x0 = max(0, cx_i - r_px)
+            x1_ = min(w, cx_i + r_px + 1)
+            patch = target_image[y0:y1_, x0:x1_, :3]
+            genes[i, 6:9] = np.round(patch.mean(axis=(0, 1)) * 255.0)
+        else:
+            # Chicos: promedio de 10 puntos random dentro de la forma
+            if gene_type == "triangle":
+                ax, ay = genes[i, 0], genes[i, 1]
+                bx, by = genes[i, 2], genes[i, 3]
+                cvx, cvy = genes[i, 4], genes[i, 5]
+                colors = np.empty((10, 3), dtype=np.float32)
+                for s in range(10):
+                    r1, r2 = np.random.random(), np.random.random()
+                    if r1 + r2 > 1:
+                        r1, r2 = 1 - r1, 1 - r2
+                    px = int(np.clip((ax + r1 * (bx - ax) + r2 * (cvx - ax)) * w, 0, w - 1))
+                    py = int(np.clip((ay + r1 * (by - ay) + r2 * (cvy - ay)) * h, 0, h - 1))
+                    colors[s] = target_image[py, px, :3]
+            else:
+                cx, cy = genes[i, 0], genes[i, 1]
+                px = int(np.clip(cx * w, 0, w - 1))
+                py = int(np.clip(cy * h, 0, h - 1))
+                colors = target_image[py, px, :3].reshape(1, 3)
+            genes[i, 6:9] = np.round(colors.mean(axis=0) * 255.0)
+
+    return genes
 
 
 def clamp(arr: np.ndarray, gene_type: str) -> np.ndarray:

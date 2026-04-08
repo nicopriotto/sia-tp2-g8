@@ -31,6 +31,8 @@ class EpochState:
     mutation_weight_history: list[list[float]] = field(default_factory=list)
     last_generation: int = 0
     stop_reason: str | None = None
+    stagnation_fitness: float = 0.0  # Fitness al ultimo chequeo de estancamiento
+    boosted_generations: int = 0     # Generaciones restantes con mutation boost
 
 
 class GeneticAlgorithm:
@@ -248,6 +250,15 @@ class GeneticAlgorithm:
 
         executor = ThreadPoolExecutor() if self._parallel else None
 
+        # Anti-estancamiento: configuración
+        stag_interval = config.stagnation_check_interval
+        stag_threshold = config.stagnation_threshold
+        stag_boost = config.stagnation_mutation_boost
+        stag_replace = config.stagnation_replace_pct
+        original_mutation_rate = config.mutation_rate
+        if stag_interval > 0:
+            state.stagnation_fitness = population.best.fitness
+
         for generation in range(start_gen, end_gen):
             generation_start = time.time()
 
@@ -261,6 +272,47 @@ class GeneticAlgorithm:
                     state.stop_reason = "tiempo_maximo"
                     state.last_generation = generation - 1
                     break
+
+            # --- Anti-estancamiento ---
+            if stag_interval > 0 and generation > start_gen and generation % stag_interval == 0:
+                improvement = population.best.fitness - state.stagnation_fitness
+                if improvement < stag_threshold:
+                    # Mutation boost temporal
+                    config.mutation_rate = min(1.0, original_mutation_rate * stag_boost)
+                    state.boosted_generations = stag_interval
+
+                    # Reinicio parcial: reemplazar los peores con nuevos individuos
+                    n_replace = max(1, int(len(population.individuals) * stag_replace))
+                    gene_type = getattr(config, 'gene_type', 'triangle')
+                    population.individuals.sort(key=lambda ind: ind.fitness)
+                    for j in range(n_replace):
+                        from core.individual import Individual
+                        if getattr(config, 'smart_init', False):
+                            new_ind = Individual.smart_random(
+                                config.triangle_count, gene_type, target,
+                            )
+                        else:
+                            new_ind = Individual.random(config.triangle_count, gene_type)
+                        new_ind.compute_fitness(target, renderer, fitness_fn)
+                        population.individuals[j] = new_ind
+
+                    logger.info(
+                        "Gen %d | ESTANCAMIENTO detectado (mejora=%.6f < %.6f) "
+                        "| Mutation boost x%.1f | %d individuos reemplazados",
+                        generation, improvement, stag_threshold, stag_boost, n_replace,
+                    )
+                else:
+                    # No estancado: restaurar mutation rate si estaba boosted
+                    config.mutation_rate = original_mutation_rate
+                    state.boosted_generations = 0
+
+                state.stagnation_fitness = population.best.fitness
+
+            # Decrementar boost counter
+            if state.boosted_generations > 0:
+                state.boosted_generations -= 1
+                if state.boosted_generations == 0:
+                    config.mutation_rate = original_mutation_rate
 
             previous_best_fitness = population.best.fitness
 
