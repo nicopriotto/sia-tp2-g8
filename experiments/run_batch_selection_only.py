@@ -42,7 +42,7 @@ FORCED_GLOBAL_OVERRIDES = {
     "max_seconds": 0.0,
     "elite_count": 0,
     "triangle_count": 700,
-    "fitness_threshold": 1.0,
+    "fitness_threshold": 0.99999,
     "content_threshold": 0.0,
     "content_generations": 0,
     "structure_threshold": 0.0,
