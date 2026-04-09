@@ -38,6 +38,16 @@ class Population:
         ]
         return cls(individuals=individuals)
 
+    @classmethod
+    def grid_init(cls, size: int, n_triangles: int,
+                  target_image: np.ndarray) -> "Population":
+        """Crea una poblacion con triángulos en patrón de grilla diagonal."""
+        individuals = [
+            Individual.grid_init(n_triangles, target_image)
+            for _ in range(size)
+        ]
+        return cls(individuals=individuals)
+
     @property
     def best(self) -> Individual:
         """Retorna el individuo con mayor fitness.

@@ -13,7 +13,7 @@ VALID_MUTATION_METHODS = ["Gen", "MultiGen", "Uniforme", "Completa", "NoUniforme
 
 VALID_SURVIVAL_STRATEGIES = ["Aditiva", "Exclusiva"]
 
-VALID_FITNESS_FUNCTIONS = ["MSE", "MAE", "GMSD", "Oklab", "MSSSIM", "FSIM", "SSIM", "LinearMSE"]
+VALID_FITNESS_FUNCTIONS = ["MSE", "MAE", "GMSD", "Oklab", "MSSSIM", "FSIM", "SSIM", "LinearMSE", "LinearOklab"]
 
 VALID_ISLAND_TOPOLOGIES = ["ring", "fully_connected"]
 
@@ -55,6 +55,7 @@ class Config:
     gaussian_decay_b: float = 0.0      # Decay del sigma gaussiano: 0 = sin decay, >0 = (1-progress)^b
     gaussian_swap_rate: float = 0.0    # Probabilidad de swap de Z-index entre dos triangulos
     smart_init: bool = False           # Inicializar colores sampleando de la imagen target
+    grid_init: bool = False            # Inicializar triángulos en patrón de grilla diagonal
     elite_count: int = 1
     adaptive_operator_weights: bool = False
     adaptive_operator_delta: float = 0.05
@@ -174,6 +175,7 @@ def load_config(path: str) -> Config:
         gaussian_decay_b=data.get("gaussian_decay_b", 0.0),
         gaussian_swap_rate=data.get("gaussian_swap_rate", 0.0),
         smart_init=data.get("smart_init", False),
+        grid_init=data.get("grid_init", False),
         elite_count=data.get("elite_count", 1),
         adaptive_operator_weights=data.get("adaptive_operator_weights", False),
         adaptive_operator_delta=data.get("adaptive_operator_delta", 0.05),

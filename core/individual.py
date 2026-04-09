@@ -39,6 +39,12 @@ class Individual:
         genes = gene_layout.smart_random_genes(gene_type, n_triangles, target_image)
         return cls(genes=genes, gene_type=gene_type)
 
+    @classmethod
+    def grid_init(cls, n_triangles: int, target_image: np.ndarray) -> "Individual":
+        """Crea un individuo con triángulos en patrón de grilla diagonal."""
+        genes = gene_layout.grid_init_genes(n_triangles, target_image)
+        return cls(genes=genes, gene_type="triangle")
+
     def copy(self) -> "Individual":
         """Retorna una copia profunda del individuo.
 

@@ -1,0 +1,20 @@
+{
+    "triangle_count": 100,
+    "population_size": 100,
+    "max_generations": 2000,
+    "fitness_threshold": 1.0,
+    "selection_method": "TorneosDeterministicos",
+    "crossover_methods": ["Uniform"],
+    "crossover_probability": 0.8,
+    "mutation_methods": ["NoUniforme"],
+    "mutation_rate": 0.3,
+    "survival_strategy": "Aditiva",
+    "fitness_function": "MAE",
+    "k_offspring": 80,
+    "save_every": 50,
+    "use_gpu": true,
+    "tournament_m": 5,
+    "non_uniform_b": 3.0,
+    "generational_gap": 0.8,
+    "min_error": 0.0001
+}

@@ -69,6 +69,115 @@ def smart_random_genes(gene_type: str, n: int, target_image: np.ndarray) -> np.n
     return arr
 
 
+def _build_grid_base(n: int, target_image: np.ndarray) -> np.ndarray:
+    """Construye la base determinista de triángulos en grilla.
+
+    Retorna un array (n, 11) con triángulos posicionados en grilla diagonal
+    y colores sampleados del centroide de cada triángulo en la imagen target.
+    Los triángulos sobrantes se llenan con smart_random_genes.
+    """
+    n_cells = n // 2
+    if n_cells == 0:
+        return smart_random_genes("triangle", n, target_image)
+
+    cols = int(math.ceil(math.sqrt(n_cells)))
+    rows = int(math.ceil(n_cells / cols))
+
+    cell_w = 1.0 / cols
+    cell_h = 1.0 / rows
+
+    h, w = target_image.shape[:2]
+
+    triangles = []
+    count = 0
+    for row in range(rows):
+        for col in range(cols):
+            if count >= n_cells:
+                break
+            x0 = col * cell_w
+            y0 = row * cell_h
+            x1 = x0 + cell_w
+            y1 = y0 + cell_h
+
+            # Triángulo superior-izquierdo
+            tri_a = np.zeros(N_COLS, dtype=np.float64)
+            tri_a[0], tri_a[1] = x0, y0
+            tri_a[2], tri_a[3] = x1, y0
+            tri_a[4], tri_a[5] = x0, y1
+            tri_a[10] = 1.0
+            cx_a = (x0 + x1 + x0) / 3.0
+            cy_a = (y0 + y0 + y1) / 3.0
+            px_a = min(int(cx_a * w), w - 1)
+            py_a = min(int(cy_a * h), h - 1)
+            tri_a[6:9] = np.round(target_image[py_a, px_a, :3] * 255.0)
+            tri_a[9] = 0.8
+            triangles.append(tri_a)
+
+            # Triángulo inferior-derecho
+            tri_b = np.zeros(N_COLS, dtype=np.float64)
+            tri_b[0], tri_b[1] = x1, y0
+            tri_b[2], tri_b[3] = x1, y1
+            tri_b[4], tri_b[5] = x0, y1
+            tri_b[10] = 1.0
+            cx_b = (x1 + x1 + x0) / 3.0
+            cy_b = (y0 + y1 + y1) / 3.0
+            px_b = min(int(cx_b * w), w - 1)
+            py_b = min(int(cy_b * h), h - 1)
+            tri_b[6:9] = np.round(target_image[py_b, px_b, :3] * 255.0)
+            tri_b[9] = 0.8
+            triangles.append(tri_b)
+
+            count += 1
+
+    arr = np.array(triangles[:n], dtype=np.float64)
+
+    remaining = n - arr.shape[0]
+    if remaining > 0:
+        extras = smart_random_genes("triangle", remaining, target_image)
+        arr = np.vstack([arr, extras])
+
+    return arr
+
+
+def grid_init_genes(n: int, target_image: np.ndarray,
+                    noise_geo: float = 0.15, noise_color: float = 20.0) -> np.ndarray:
+    """Genera n triángulos en patrón de grilla con ruido aleatorio.
+
+    Parte de una base determinista (grilla diagonal con colores del target)
+    y le agrega ruido gaussiano a vértices y colores para que cada llamada
+    produzca un individuo diferente, manteniendo la estructura de grilla.
+
+    Args:
+        n: cantidad total de triángulos a generar.
+        target_image: imagen target, shape (H, W, 4), float32, [0, 1].
+        noise_geo: sigma del ruido gaussiano para coordenadas de vértices.
+                   Se escala por el tamaño de celda, así el ruido es proporcional.
+        noise_color: sigma del ruido gaussiano para RGB (escala 0-255).
+
+    Returns:
+        Array (n, 11) con genes de triángulos.
+    """
+    arr = _build_grid_base(n, target_image)
+
+    # Ruido en vértices (columnas 0-5), proporcional al tamaño de celda
+    n_cells = max(n // 2, 1)
+    cols = int(math.ceil(math.sqrt(n_cells)))
+    cell_size = 1.0 / cols
+    geo_sigma = noise_geo * cell_size
+    arr[:, 0:6] += np.random.normal(0, geo_sigma, size=(arr.shape[0], 6))
+    arr[:, 0:6] = np.clip(arr[:, 0:6], 0.0, 1.0)
+
+    # Ruido en colores RGB (columnas 6-8)
+    arr[:, 6:9] += np.random.normal(0, noise_color, size=(arr.shape[0], 3))
+    arr[:, 6:9] = np.round(np.clip(arr[:, 6:9], 0.0, 255.0))
+
+    # Ruido en alpha (columna 9)
+    arr[:, 9] += np.random.normal(0, 0.15, size=arr.shape[0])
+    arr[:, 9] = np.clip(arr[:, 9], 0.05, 1.0)
+
+    return arr
+
+
 def clamp(arr: np.ndarray, gene_type: str) -> np.ndarray:
     """Clampea valores al rango válido, in-place. Retorna arr."""
     np.nan_to_num(arr, nan=0.0, posinf=1.0, neginf=0.0, copy=False)

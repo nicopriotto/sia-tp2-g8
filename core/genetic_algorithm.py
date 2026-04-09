@@ -164,7 +164,11 @@ class GeneticAlgorithm:
         start_time = time.time()
 
         gene_type = getattr(config, 'gene_type', 'triangle')
-        if getattr(config, 'smart_init', False):
+        if getattr(config, 'grid_init', False):
+            population = Population.grid_init(
+                config.population_size, config.triangle_count, self.target_image,
+            )
+        elif getattr(config, 'smart_init', False):
             population = Population.smart_random(
                 config.population_size, config.triangle_count, gene_type, self.target_image,
             )

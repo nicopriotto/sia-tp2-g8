@@ -55,7 +55,12 @@ class IslandGeneticAlgorithm:
             collector.init_csv()
             collectors.append(collector)
 
-            if getattr(island_config, 'smart_init', False):
+            if getattr(island_config, 'grid_init', False):
+                pop = Population.grid_init(
+                    island_config.population_size, island_config.triangle_count,
+                    self.target_image,
+                )
+            elif getattr(island_config, 'smart_init', False):
                 pop = Population.smart_random(
                     island_config.population_size, island_config.triangle_count,
                     gene_type, self.target_image,
