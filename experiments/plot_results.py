@@ -3,7 +3,7 @@ Genera graficos comparativos a partir de los resultados de los experimentos.
 
 Salida:
 - Curvas fitness vs generacion (una linea por configuracion, banda de error con std)
-- Grid de imagenes: gen_0000, gen_0050, gen_0200, final (una fila por configuracion)
+- Grid de imagenes: gen_0000, gen_0050, gen_0200, gen_0500, gen_3000/final (una fila por configuracion)
 - Tabla comparativa: config | fitness_final_mean | fitness_final_std | generaciones para 90%
 
 Uso:
@@ -42,7 +42,7 @@ def _natural_sort_key(name: str):
     return result
 
 
-def load_metrics(results_dir: str) -> dict[str, list]:
+def load_metrics(results_dir: str, include_configs: set[str] | None = None) -> dict[str, list]:
     """
     Carga todos los metrics.csv de un directorio de resultados.
 
@@ -61,10 +61,10 @@ def load_metrics(results_dir: str) -> dict[str, list]:
         print(f"Directorio no encontrado: {results_dir}")
         return data
 
-    config_dirs = sorted(
-        [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))],
-        key=_natural_sort_key,
-    )
+    config_dirs = [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))]
+    if include_configs:
+        config_dirs = [d for d in config_dirs if d in include_configs]
+    config_dirs = sorted(config_dirs, key=_natural_sort_key)
 
     for config_dir in config_dirs:
         config_path = os.path.join(results_dir, config_dir)
@@ -108,7 +108,7 @@ def plot_fitness_curves(data: dict, title: str, output_path: str):
             mean.index,
             (mean.values - std.values).clip(0),
             (mean.values + std.values).clip(0, 1),
-            alpha=0.25, color=line.get_color(),
+            alpha=0.08, color=line.get_color(),
         )
 
     plt.xlabel("Generacion", fontsize=12)
@@ -124,32 +124,67 @@ def plot_fitness_curves(data: dict, title: str, output_path: str):
     print(f"Grafico guardado: {output_path}")
 
 
-def plot_avg_fitness_curves(data: dict, title: str, output_path: str):
-    """Grafica curvas de fitness promedio de la poblacion con banda de desvio estandar."""
+def plot_avg_fitness_curves(
+    data: dict,
+    title: str,
+    output_path: str,
+    avg_mode: str = "raw",
+):
+    """Grafica curvas de fitness promedio con modos raw, log(fitness) o log(1-fitness)."""
     if not data:
         print("Sin datos para graficar curvas de fitness promedio.")
         return
 
+    if avg_mode not in {"raw", "fitness_log", "error_log"}:
+        raise ValueError(
+            f"avg_mode invalido: {avg_mode}. Opciones: raw, fitness_log, error_log"
+        )
+
     plt.figure(figsize=(12, 6))
+    min_positive = 1e-8
 
     for label, dfs in data.items():
-        merged = pd.concat(dfs).groupby("generation")["avg_fitness"]
+        merged_df = pd.concat(dfs)
+
+        if avg_mode == "fitness_log":
+            merged_df["plot_value"] = merged_df["avg_fitness"].clip(lower=min_positive)
+        elif avg_mode == "error_log":
+            # Separar curvas cerca de 1.0: trabajar en error por seed y luego promediar.
+            merged_df["plot_value"] = (1.0 - merged_df["avg_fitness"]).clip(lower=min_positive)
+        else:
+            merged_df["plot_value"] = merged_df["avg_fitness"]
+
+        merged = merged_df.groupby("generation")["plot_value"]
         mean = merged.mean()
         std = merged.std().fillna(0)
 
         line, = plt.plot(mean.index, mean.values, label=label, linewidth=1.5)
+
+        if avg_mode in {"fitness_log", "error_log"}:
+            lower = np.maximum(mean.values - std.values, min_positive)
+            upper = np.maximum(mean.values + std.values, lower)
+        else:
+            lower = (mean.values - std.values).clip(0)
+            upper = (mean.values + std.values).clip(0, 1)
         plt.fill_between(
             mean.index,
-            (mean.values - std.values).clip(0),
-            (mean.values + std.values).clip(0, 1),
-            alpha=0.25, color=line.get_color(),
+            lower,
+            upper,
+            alpha=0.08, color=line.get_color(),
         )
 
     plt.xlabel("Generacion", fontsize=12)
-    plt.ylabel("Fitness promedio de la poblacion", fontsize=12)
+    if avg_mode == "fitness_log":
+        plt.yscale("log")
+        plt.ylabel("Fitness promedio [log]", fontsize=12)
+    elif avg_mode == "error_log":
+        plt.yscale("log")
+        plt.ylabel("Error promedio (1 - fitness) [log]", fontsize=12)
+    else:
+        plt.ylabel("Fitness promedio de la poblacion", fontsize=12)
     plt.title(title, fontsize=14)
     plt.legend(fontsize=10, loc="lower right")
-    plt.grid(True, alpha=0.3)
+    plt.grid(True, alpha=0.3, which="both")
     plt.tight_layout()
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -158,7 +193,12 @@ def plot_avg_fitness_curves(data: dict, title: str, output_path: str):
     print(f"Grafico guardado: {output_path}")
 
 
-def create_image_grid(results_dir: str, generations: list[int], output_path: str):
+def create_image_grid(
+    results_dir: str,
+    generations: list[int],
+    output_path: str,
+    include_configs: set[str] | None = None,
+):
     """
     Crea un grid de imagenes intermedias con matplotlib.
     Una fila por configuracion (ordenada logicamente), una columna por generacion.
@@ -169,10 +209,10 @@ def create_image_grid(results_dir: str, generations: list[int], output_path: str
         print(f"Directorio no encontrado: {results_dir}")
         return
 
-    configs = sorted(
-        [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))],
-        key=_natural_sort_key,
-    )
+    configs = [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))]
+    if include_configs:
+        configs = [d for d in configs if d in include_configs]
+    configs = sorted(configs, key=_natural_sort_key)
 
     if not configs:
         print("Sin configuraciones para crear grid de imagenes.")
@@ -289,13 +329,21 @@ def create_summary_table(data: dict, output_path: str):
     print(f"\nTabla guardada: {output_path}")
 
 
-def process_experiment(results_dir: str, output_dir: str, experiment_name: str):
+def process_experiment(
+    results_dir: str,
+    output_dir: str,
+    experiment_name: str,
+    avg_mode: str = "raw",
+    include_configs: list[str] | None = None,
+):
     """Procesa un experimento completo: carga datos, genera graficos y tabla."""
     print(f"\n{'='*60}")
     print(f"Procesando experimento: {experiment_name}")
     print(f"{'='*60}")
 
-    data = load_metrics(results_dir)
+    include_set = set(include_configs) if include_configs else None
+
+    data = load_metrics(results_dir, include_configs=include_set)
     if not data:
         print(f"Sin resultados en {results_dir}")
         return
@@ -315,13 +363,15 @@ def process_experiment(results_dir: str, output_dir: str, experiment_name: str):
         data,
         title=f"Fitness promedio - {experiment_name}",
         output_path=os.path.join(output_dir, f"{safe_name}_fitness_avg.png"),
+        avg_mode=avg_mode,
     )
 
     # Grid de imagenes intermedias
     create_image_grid(
         results_dir,
-        generations=[0, 50, 200, 500],
+        generations=[0, 50, 200, 500, 3000],
         output_path=os.path.join(output_dir, f"{safe_name}_image_grid.png"),
+        include_configs=include_set,
     )
 
     # Tabla resumen
@@ -351,8 +401,17 @@ def main():
         "--all", action="store_true",
         help="Procesar todos los subdirectorios como experimentos independientes"
     )
+    parser.add_argument(
+        "--avg_mode", type=str, choices=["raw", "fitness_log", "error_log"], default="raw",
+        help="Modo del grafico fitness_avg: raw | fitness_log | error_log"
+    )
+    parser.add_argument(
+        "--include_configs", type=str, default="",
+        help="Lista separada por comas de configuraciones a incluir (ej: cfg1,cfg2)"
+    )
 
     args = parser.parse_args()
+    include_configs = [c.strip() for c in args.include_configs.split(",") if c.strip()]
 
     if args.all:
         # Procesar todos los subdirectorios
@@ -366,13 +425,21 @@ def main():
                     exp_path,
                     os.path.join(output_base, exp_name),
                     exp_name,
+                    avg_mode=args.avg_mode,
+                    include_configs=include_configs,
                 )
     else:
         exp_name = args.name or os.path.basename(args.input.rstrip("/"))
         output_dir = args.output or os.path.join(
             os.path.dirname(args.input.rstrip("/")), "..", "plots", exp_name
         )
-        process_experiment(args.input, output_dir, exp_name)
+        process_experiment(
+            args.input,
+            output_dir,
+            exp_name,
+            avg_mode=args.avg_mode,
+            include_configs=include_configs,
+        )
 
 
 if __name__ == "__main__":

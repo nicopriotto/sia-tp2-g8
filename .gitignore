@@ -209,6 +209,7 @@ __marimo__/
 # Project output (generated images, metrics, etc.)
 output/
 experiments/results/
+experiments/plots/
 
 # Project presentation
 presentacion/

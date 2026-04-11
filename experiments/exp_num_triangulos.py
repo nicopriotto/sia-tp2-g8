@@ -1,7 +1,7 @@
 """
 Experimento: cantidad de triangulos.
 
-Compara distintas cantidades de triangulos (10, 25, 50, 100, 200)
+Compara distintas cantidades de triangulos (10, 50, 200)
 en las 4 imagenes principales.
 """
 import os
@@ -20,9 +20,7 @@ from experiments.run_experiment import (
 
 CONFIGS = [
     ("10_triangulos", {"triangle_count": 10}),
-    ("25_triangulos", {"triangle_count": 25}),
     ("50_triangulos", {"triangle_count": 50}),
-    ("100_triangulos", {"triangle_count": 100}),
     ("200_triangulos", {"triangle_count": 200}),
 ]
 

@@ -46,6 +46,7 @@ echo "[12/12] Triangulos vs elipses..."
 
 echo ""
 echo "=== Generando plots por imagen ==="
+NUM_TRI_CONFIGS="10_triangulos,50_triangulos,200_triangulos"
 
 # Complejidad: estructura plana (compara imagenes entre si)
 echo "  Ploteando complejidad..."
@@ -59,10 +60,18 @@ for exp in $EXPERIMENTS; do
         if [ -d "$img_dir" ]; then
             img_name=$(basename "$img_dir")
             echo "  Ploteando $exp/$img_name..."
-            .venv/bin/python experiments/plot_results.py \
-                --input "$img_dir" \
-                --output "experiments/plots/$exp/$img_name" \
-                --name "$exp - $img_name"
+            if [ "$exp" = "num_triangulos" ]; then
+                .venv/bin/python experiments/plot_results.py \
+                    --input "$img_dir" \
+                    --output "experiments/plots/$exp/$img_name" \
+                    --name "$exp - $img_name" \
+                    --include_configs "$NUM_TRI_CONFIGS"
+            else
+                .venv/bin/python experiments/plot_results.py \
+                    --input "$img_dir" \
+                    --output "experiments/plots/$exp/$img_name" \
+                    --name "$exp - $img_name"
+            fi
         fi
     done
 done
@@ -73,6 +82,13 @@ echo "=== Generando analisis cruzado entre imagenes ==="
     --all \
     --input experiments/results \
     --output experiments/plots
+
+# Re-generar num_triangulos filtrado para evitar que entren configs viejas.
+.venv/bin/python experiments/plot_cross_image.py \
+    --input experiments/results/num_triangulos \
+    --output experiments/plots/num_triangulos \
+    --name num_triangulos \
+    --include_configs "$NUM_TRI_CONFIGS"
 
 echo ""
 echo "=== Ploteando islas noche estrellada ==="

@@ -3,7 +3,7 @@ Experimento: comparar cantidad de triangulos.
 
 Varia triangle_count para observar el trade-off entre calidad de
 aproximacion y costo computacional.
-Valores: 5, 10, 25, 50, 100.
+Valores: 10, 50, 200.
 
 Observaciones esperadas:
 - Mas triangulos = mejor aproximacion pero mayor tiempo por generacion.
@@ -25,7 +25,7 @@ from experiments.run_experiment import (
 )
 
 # Cantidades de triangulos a comparar
-VALUES = [5, 10, 25, 50, 100]
+VALUES = [10, 50, 200]
 
 CONFIGS = [
     (f"triangulos_{v}", {"triangle_count": v})

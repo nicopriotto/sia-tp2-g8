@@ -45,6 +45,13 @@ def _natural_sort_key(name: str):
     return [int(p) if p.isdigit() else p.lower() for p in parts]
 
 
+def _pretty_config_label(name: str) -> str:
+    """Acorta labels largas para mejorar legibilidad en ejes."""
+    if name.endswith("_triangulos"):
+        return name.replace("_triangulos", "")
+    return name
+
+
 def load_cross_image_data(results_dir: str) -> pd.DataFrame:
     """
     Carga datos de todas las imagenes y configs en un DataFrame unificado.
@@ -119,49 +126,75 @@ def load_cross_image_data(results_dir: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def plot_fitness_heatmap(data: pd.DataFrame, title: str, output_path: str):
+def plot_fitness_heatmap(
+    data: pd.DataFrame,
+    title: str,
+    output_path: str,
+    y_label: str = "Configuracion",
+):
     """Heatmap: config x imagen -> fitness final medio."""
     pivot = data.groupby(["config", "imagen"])["fitness_final"].mean().unstack()
     pivot = pivot.loc[sorted(pivot.index, key=_natural_sort_key)]
 
-    plt.figure(figsize=(max(8, len(pivot.columns) * 2.5), max(4, len(pivot) * 0.6)))
+    fig, ax = plt.subplots(figsize=(max(8, len(pivot.columns) * 2.5), max(4.8, len(pivot) * 1.05)))
     sns.heatmap(
         pivot, annot=True, fmt=".4f", cmap="RdYlGn",
         linewidths=0.5, vmin=pivot.values.min() * 0.98, vmax=min(1.0, pivot.values.max() * 1.005),
         cbar_kws={"label": "Fitness final"},
+        ax=ax,
     )
-    plt.title(f"Fitness final por configuracion e imagen\n{title}", fontsize=13)
-    plt.xlabel("Imagen", fontsize=11)
-    plt.ylabel("Configuracion", fontsize=11)
-    plt.xticks(rotation=15, ha="right")
-    plt.tight_layout()
+    ax.set_title(f"Fitness final por configuracion e imagen\n{title}", fontsize=13)
+    ax.set_xlabel("Imagen", fontsize=11)
+    ax.set_ylabel(y_label, fontsize=11, labelpad=24)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=15, ha="right")
+    ax.set_yticklabels(
+        [_pretty_config_label(t.get_text()) for t in ax.get_yticklabels()],
+        rotation=0,
+        va="center",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    fig.subplots_adjust(left=0.22)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    plt.savefig(output_path, dpi=150)
-    plt.close()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
     print(f"  Heatmap guardado: {output_path}")
 
 
-def plot_convergence_heatmap(data: pd.DataFrame, title: str, output_path: str):
+def plot_convergence_heatmap(
+    data: pd.DataFrame,
+    title: str,
+    output_path: str,
+    y_label: str = "Configuracion",
+):
     """Heatmap: config x imagen -> generacion para alcanzar 90% fitness."""
     pivot = data.groupby(["config", "imagen"])["gen_90pct"].mean().unstack()
     pivot = pivot.loc[sorted(pivot.index, key=_natural_sort_key)]
 
-    plt.figure(figsize=(max(8, len(pivot.columns) * 2.5), max(4, len(pivot) * 0.6)))
+    fig, ax = plt.subplots(figsize=(max(8, len(pivot.columns) * 2.5), max(4.8, len(pivot) * 1.05)))
     sns.heatmap(
         pivot, annot=True, fmt=".0f", cmap="RdYlGn_r",
         linewidths=0.5,
         cbar_kws={"label": "Generaciones para 90%"},
+        ax=ax,
     )
-    plt.title(f"Velocidad de convergencia (gen para 90%)\n{title}", fontsize=13)
-    plt.xlabel("Imagen", fontsize=11)
-    plt.ylabel("Configuracion", fontsize=11)
-    plt.xticks(rotation=15, ha="right")
-    plt.tight_layout()
+    ax.set_title(f"Velocidad de convergencia (gen para 90%)\n{title}", fontsize=13)
+    ax.set_xlabel("Imagen", fontsize=11)
+    ax.set_ylabel(y_label, fontsize=11, labelpad=24)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=15, ha="right")
+    ax.set_yticklabels(
+        [_pretty_config_label(t.get_text()) for t in ax.get_yticklabels()],
+        rotation=0,
+        va="center",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    fig.subplots_adjust(left=0.22)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    plt.savefig(output_path, dpi=150)
-    plt.close()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
     print(f"  Heatmap convergencia guardado: {output_path}")
 
 
@@ -265,23 +298,35 @@ def save_cross_summary(data: pd.DataFrame, output_path: str):
     print(f"  Tabla resumen guardada: {output_path}")
 
 
-def process_experiment(results_dir: str, output_dir: str, exp_name: str):
+def process_experiment(
+    results_dir: str,
+    output_dir: str,
+    exp_name: str,
+    include_configs: list[str] | None = None,
+):
     """Procesa un experimento con estructura por imagen."""
     print(f"\n  Procesando analisis cruzado: {exp_name}")
 
     data = load_cross_image_data(results_dir)
+    if include_configs:
+        include_set = set(include_configs)
+        data = data[data["config"].isin(include_set)]
     if data.empty:
         print(f"  Sin datos en {results_dir}")
         return
 
+    y_axis_label = "Cantidad de triangulos" if exp_name == "num_triangulos" else "Configuracion"
+
     plot_fitness_heatmap(
         data, exp_name,
         os.path.join(output_dir, f"{exp_name}_heatmap_fitness.png"),
+        y_label=y_axis_label,
     )
 
     plot_convergence_heatmap(
         data, exp_name,
         os.path.join(output_dir, f"{exp_name}_heatmap_convergencia.png"),
+        y_label=y_axis_label,
     )
 
     plot_grouped_bars(
@@ -306,8 +351,13 @@ def main():
     parser.add_argument("--output", required=True, help="Directorio de plots")
     parser.add_argument("--all", action="store_true", help="Procesar todos los subdirectorios")
     parser.add_argument("--name", default=None, help="Nombre del experimento")
+    parser.add_argument(
+        "--include_configs", default="",
+        help="Lista separada por comas de configuraciones a incluir (ej: cfg1,cfg2)"
+    )
 
     args = parser.parse_args()
+    include_configs = [c.strip() for c in args.include_configs.split(",") if c.strip()]
 
     if args.all:
         for exp_name in sorted(os.listdir(args.input)):
@@ -317,10 +367,16 @@ def main():
                     exp_path,
                     os.path.join(args.output, exp_name),
                     exp_name,
+                    include_configs=include_configs,
                 )
     else:
         exp_name = args.name or os.path.basename(args.input.rstrip("/"))
-        process_experiment(args.input, args.output, exp_name)
+        process_experiment(
+            args.input,
+            args.output,
+            exp_name,
+            include_configs=include_configs,
+        )
 
 
 if __name__ == "__main__":
