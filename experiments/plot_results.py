@@ -124,6 +124,100 @@ def plot_fitness_curves(data: dict, title: str, output_path: str):
     print(f"Grafico guardado: {output_path}")
 
 
+def plot_avg_fitness_small_multiples(
+    data: dict,
+    title: str,
+    output_path: str,
+    avg_mode: str = "raw",
+    n_cols: int = 3,
+):
+    """Grafica fitness_avg en small multiples: un subplot por configuracion."""
+    if not data:
+        print("Sin datos para graficar small multiples de fitness promedio.")
+        return
+
+    if avg_mode not in {"raw", "fitness_log", "error_log"}:
+        raise ValueError(
+            f"avg_mode invalido: {avg_mode}. Opciones: raw, fitness_log, error_log"
+        )
+
+    labels = list(data.keys())
+    n_plots = len(labels)
+    n_cols = max(1, min(n_cols, n_plots))
+    n_rows = int(np.ceil(n_plots / n_cols))
+    min_positive = 1e-8
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(4.2 * n_cols, 3.0 * n_rows),
+        sharex=True,
+        sharey=True,
+    )
+
+    axes = np.array(axes, dtype=object)
+    if n_rows == 1 and n_cols == 1:
+        axes = axes.reshape(1, 1)
+    elif n_rows == 1:
+        axes = axes.reshape(1, -1)
+    elif n_cols == 1:
+        axes = axes.reshape(-1, 1)
+
+    for idx, label in enumerate(labels):
+        row, col = divmod(idx, n_cols)
+        ax = axes[row, col]
+
+        merged_df = pd.concat(data[label])
+        if avg_mode == "fitness_log":
+            merged_df["plot_value"] = merged_df["avg_fitness"].clip(lower=min_positive)
+        elif avg_mode == "error_log":
+            merged_df["plot_value"] = (1.0 - merged_df["avg_fitness"]).clip(lower=min_positive)
+        else:
+            merged_df["plot_value"] = merged_df["avg_fitness"]
+
+        merged = merged_df.groupby("generation")["plot_value"]
+        mean = merged.mean()
+        std = merged.std().fillna(0)
+
+        ax.plot(mean.index, mean.values, linewidth=1.6)
+        if avg_mode in {"fitness_log", "error_log"}:
+            lower = np.maximum(mean.values - std.values, min_positive)
+            upper = np.maximum(mean.values + std.values, lower)
+        else:
+            lower = (mean.values - std.values).clip(0)
+            upper = (mean.values + std.values).clip(0, 1)
+        ax.fill_between(mean.index, lower, upper, alpha=0.08)
+
+        if avg_mode in {"fitness_log", "error_log"}:
+            ax.set_yscale("log")
+
+        ax.set_title(label, fontsize=10)
+        ax.grid(True, alpha=0.3, which="both")
+
+        if row == n_rows - 1:
+            ax.set_xlabel("Generacion", fontsize=9)
+
+        if col == 0:
+            if avg_mode == "fitness_log":
+                ax.set_ylabel("Fitness [log]", fontsize=9)
+            elif avg_mode == "error_log":
+                ax.set_ylabel("Error (1 - fitness) [log]", fontsize=9)
+            else:
+                ax.set_ylabel("Fitness promedio", fontsize=9)
+
+    for idx in range(n_plots, n_rows * n_cols):
+        row, col = divmod(idx, n_cols)
+        axes[row, col].axis("off")
+
+    fig.suptitle(f"{title} (small multiples)", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"Grafico small multiples guardado: {output_path}")
+
+
 def plot_avg_fitness_curves(
     data: dict,
     title: str,
@@ -192,6 +286,55 @@ def plot_avg_fitness_curves(
     plt.close()
     print(f"Grafico guardado: {output_path}")
 
+
+
+
+def plot_avg_error_gap_to_best(data: dict, title: str, output_path: str):
+    """Grafica la brecha de error (1-fitness) de cada config respecto al mejor metodo."""
+    if not data:
+        print("Sin datos para graficar brecha de error respecto al mejor.")
+        return
+
+    avg_curves = {}
+    final_best_score = {}
+
+    for label, dfs in data.items():
+        merged = pd.concat(dfs)
+        avg_curve = merged.groupby("generation")["avg_fitness"].mean()
+        best_curve = merged.groupby("generation")["best_fitness"].mean()
+        avg_curves[label] = avg_curve
+        final_best_score[label] = best_curve.iloc[-1]
+
+    best_label = max(final_best_score, key=final_best_score.get)
+    base_error = 1.0 - avg_curves[best_label]
+
+    plt.figure(figsize=(12, 6))
+
+    labels = sorted(avg_curves.keys(), key=_natural_sort_key)
+    for label in labels:
+        curve = avg_curves[label]
+        idx = curve.index.intersection(base_error.index)
+        gap = (1.0 - curve.loc[idx]) - base_error.loc[idx]
+        plt.plot(
+            idx,
+            gap.values,
+            label=label,
+            linewidth=2.0 if label == best_label else 1.5,
+            alpha=1.0 if label == best_label else 0.9,
+        )
+
+    plt.axhline(0.0, color="black", linewidth=1.0, alpha=0.6)
+    plt.xlabel("Generacion", fontsize=12)
+    plt.ylabel(f"Brecha de error vs {best_label} (1 - fitness)", fontsize=12)
+    plt.title(f"Diferencia de error respecto al mejor metodo\n{title}", fontsize=14)
+    plt.legend(fontsize=9, loc="upper right")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+    print(f"Grafico gap-to-best guardado: {output_path}")
 
 def create_image_grid(
     results_dir: str,
@@ -335,6 +478,8 @@ def process_experiment(
     experiment_name: str,
     avg_mode: str = "raw",
     include_configs: list[str] | None = None,
+    avg_small_multiples: bool = False,
+    avg_gap_to_best: bool = False,
 ):
     """Procesa un experimento completo: carga datos, genera graficos y tabla."""
     print(f"\n{'='*60}")
@@ -365,6 +510,19 @@ def process_experiment(
         output_path=os.path.join(output_dir, f"{safe_name}_fitness_avg.png"),
         avg_mode=avg_mode,
     )
+    if avg_small_multiples:
+        plot_avg_fitness_small_multiples(
+            data,
+            title=f"Fitness promedio - {experiment_name}",
+            output_path=os.path.join(output_dir, f"{safe_name}_fitness_avg_small_multiples.png"),
+            avg_mode=avg_mode,
+        )
+    if avg_gap_to_best:
+        plot_avg_error_gap_to_best(
+            data,
+            title=f"Fitness promedio - {experiment_name}",
+            output_path=os.path.join(output_dir, f"{safe_name}_fitness_avg_gap_best.png"),
+        )
 
     # Grid de imagenes intermedias
     create_image_grid(
@@ -409,6 +567,14 @@ def main():
         "--include_configs", type=str, default="",
         help="Lista separada por comas de configuraciones a incluir (ej: cfg1,cfg2)"
     )
+    parser.add_argument(
+        "--avg_small_multiples", action="store_true",
+        help="Genera un grafico adicional de fitness_avg con subplots (uno por configuracion)"
+    )
+    parser.add_argument(
+        "--avg_gap_to_best", action="store_true",
+        help="Genera un grafico adicional con la brecha de error de cada config respecto al mejor metodo"
+    )
 
     args = parser.parse_args()
     include_configs = [c.strip() for c in args.include_configs.split(",") if c.strip()]
@@ -427,6 +593,8 @@ def main():
                     exp_name,
                     avg_mode=args.avg_mode,
                     include_configs=include_configs,
+                    avg_small_multiples=args.avg_small_multiples,
+                    avg_gap_to_best=args.avg_gap_to_best,
                 )
     else:
         exp_name = args.name or os.path.basename(args.input.rstrip("/"))
@@ -439,6 +607,8 @@ def main():
             exp_name,
             avg_mode=args.avg_mode,
             include_configs=include_configs,
+            avg_small_multiples=args.avg_small_multiples,
+            avg_gap_to_best=args.avg_gap_to_best,
         )
 
 

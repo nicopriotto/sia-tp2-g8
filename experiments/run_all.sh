@@ -21,7 +21,7 @@ echo "[4/12] Inicializacion de poblacion..."
 .venv/bin/python experiments/exp_inicializacion.py
 
 echo "[5/12] Metodos de seleccion..."
-.venv/bin/python experiments/exp_seleccion.py
+.venv/bin/python experiments/exp_seleccion.py --max_generations 3000
 
 echo "[6/12] Operadores de crossover..."
 .venv/bin/python experiments/exp_crossover.py

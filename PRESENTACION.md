@@ -84,7 +84,7 @@ bash experiments/run_all.sh
 
 ### Slides 20-23: Seleccion (x4 imagenes)
 - `plots/seleccion/<IMG>/seleccion_<IMG>_fitness_best.png`
-- Compara: Elite, Ruleta, Universal, Ranking, Boltzmann, TorneosDeterministicos
+- Compara: Elite, Ruleta, Universal, Ranking, Boltzmann, TorneosDeterministicos, TorneosProbabilisticos
 
 ### Slide 24: Seleccion - Resumen cruzado
 - `plots/seleccion/seleccion_heatmap_fitness.png`

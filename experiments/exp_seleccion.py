@@ -2,7 +2,8 @@
 Experimento: comparar metodos de seleccion.
 
 Varia el metodo de seleccion manteniendo el resto de hiperparametros fijos.
-Metodos: Elite, Ruleta, Universal, Ranking, Boltzmann, TorneosDeterministicos.
+Metodos: Elite, Ruleta, Universal, Ranking, Boltzmann,
+TorneosDeterministicos y TorneosProbabilisticos.
 Corre en las 4 imagenes principales.
 """
 import os
@@ -24,8 +25,20 @@ METHODS = [
     ("Ruleta", {"selection_method": "Ruleta"}),
     ("Universal", {"selection_method": "Universal"}),
     ("Ranking", {"selection_method": "Ranking"}),
-    ("Boltzmann", {"selection_method": "Boltzmann", "boltzmann_t0": 100.0, "boltzmann_tc": 1.0, "boltzmann_k": 0.01}),
-    ("TorneosDeterministicos", {"selection_method": "TorneosDeterministicos", "tournament_m": 5}),
+    ("Boltzmann", {
+        "selection_method": "Boltzmann",
+        "boltzmann_t0": 100.0,
+        "boltzmann_tc": 1.0,
+        "boltzmann_k": 0.01,
+    }),
+    ("TorneosDeterministicos", {
+        "selection_method": "TorneosDeterministicos",
+        "tournament_m": 5,
+    }),
+    ("TorneosProbabilisticos", {
+        "selection_method": "TorneosProbabilisticos",
+        "tournament_threshold": 0.75,
+    }),
 ]
 
 DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "seleccion")
@@ -45,7 +58,7 @@ def main():
         configs=METHODS,
         output_base=output_base,
         seeds=seeds,
-        max_generations=max_gen,
+        max_generations=max_gen or 3000,
     )
 
     print(f"\nResultados guardados en: {output_base}")
