@@ -46,7 +46,7 @@ BASE_CONFIG = {
     "save_every": 50,
     "smart_init": True,
     "use_gpu": True,
-    "gpu_device": "dedicated",
+    "gpu_device": "auto",
     "gaussian_sigma": 0.1,
     "gaussian_sigma_color": 0.08,
     "gaussian_decay_b": 2.0,

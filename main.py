@@ -169,6 +169,10 @@ def build_operators(config: Config):
 
 def create_renderer(config: Config, target_image: np.ndarray, width: int, height: int):
     """Crea el renderer apropiado segun la configuracion y disponibilidad."""
+    if config.use_gpu and config.gene_type == "ellipse":
+        logger.warning("GPU no soporta elipses, usando CPU renderer.")
+        return CPURenderer()
+
     if config.use_gpu:
         from render.gpu_renderer import GPURenderer, gpu_available
 
