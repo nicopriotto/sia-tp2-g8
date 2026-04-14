@@ -1,30 +1,36 @@
 # Run Configs
 
-Configs de ejemplo para probar el algoritmo genetico sin tener que editar `config.json`.
+Configs JSON de ejemplo para ejecutar el algoritmo sin editar manualmente una configuracion desde cero.
 
-## Como correrlos
-
-Activar el entorno virtual:
+## Uso
 
 ```bash
-source .venv/bin/activate
+python3 main.py <ruta_imagen> <ruta_config_json>
 ```
 
-Ejecutar el programa indicando una imagen objetivo y uno de estos configs:
+Ejemplos:
 
 ```bash
-python main.py /ruta/a/tu/imagen.png run_configs/quick-smoke-20gen.json
-python main.py /ruta/a/tu/imagen.png run_configs/baseline-100gen.json
+python3 main.py images/1.jpg run_configs/base-config.json
+python3 main.py images/3.jpg run_configs/config.json
 ```
 
 ## Configs disponibles
 
-- `quick-smoke-20gen.json`: corrida corta para verificar que todo funciona rapido.
-- `baseline-100gen.json`: corrida base un poco mas larga para observar mejor la evolucion.
+- `base-config.json`: base general con todos los campos.
+- `config.json`: config de uso general.
+- `bajo.json`: configuracion orientada a imagenes simples.
+- `medio.json`: configuracion intermedia.
+- `alto.json`: configuracion para imagenes complejas.
+- `config_overnight_noche.json`: corrida larga sobre noche estrellada.
+- `config_islands.json`: ejemplo de Island Model.
+- `config_islands_diverse.json`: Island Model con islas mas diversas.
 
-## Output
+## Output esperado
 
-Cada corrida genera:
+Cada corrida genera en `output/`:
 
-- `output/final.png`
-- `output/triangles.json`
+- `final.png`
+- `triangles.json`
+- `metrics.csv`
+- `gen_XXXX.png` (si la config guarda snapshots)

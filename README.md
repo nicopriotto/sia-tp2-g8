@@ -1,275 +1,189 @@
-# Algoritmo Genetico para Aproximacion de Imagenes con Figuras Geometricas
+# Algoritmo Genetico para Aproximacion de Imagenes
 
 ## Descripcion
 
-Proyecto de la materia Sistemas de Inteligencia Artificial (SIA) que implementa un algoritmo genetico para aproximar imagenes usando triangulos y elipses RGBA semi-transparentes sobre un canvas blanco. El sistema soporta multiples operadores de seleccion, crossover, mutacion y supervivencia, todos configurables via un archivo JSON.
+Implementacion de un algoritmo genetico para aproximar una imagen objetivo usando figuras RGBA semitransparentes (triangulos o elipses) sobre un canvas blanco.
+
+El pipeline soporta:
+- multiples metodos de seleccion,
+- multiples operadores de crossover y mutacion,
+- estrategias de supervivencia,
+- funciones de fitness intercambiables,
+- renderer CPU o GPU.
 
 ## Requisitos
 
-- Python 3.10 o superior
-- Dependencias: ver `requirements.txt`
+- Python 3.10+
+- Dependencias de Python en `requirements.txt`
 
 ## Instalacion
 
 ```bash
-# Clonar el repositorio
-git clone <url-del-repositorio>
-cd sia-tp2-g8
-
-# Instalar dependencias
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Para experimentacion con graficos (opcional):
+Para graficos de experimentos:
 
 ```bash
-pip install matplotlib pandas
+pip install matplotlib pandas seaborn Pillow
 ```
 
-## Ejecucion
+## Ejecucion basica
 
 ```bash
-python3 main.py <ruta_imagen> <ruta_config>
+python3 main.py <ruta_imagen> <ruta_config_json>
 ```
+
+Ejemplo real del repo:
+
+```bash
+python3 main.py images/1.jpg run_configs/config.json
+```
+
+## Configuracion
+
+La configuracion se carga desde JSON. Como punto de partida, usar:
+
+- `run_configs/base-config.json`
+
+Campos principales:
+
+- `triangle_count`, `population_size`, `max_generations`, `fitness_threshold`
+- `selection_method` o `selection_methods`
+- `crossover_methods`, `crossover_probability`
+- `mutation_methods`, `mutation_rate`
+- `survival_strategy`, `fitness_function`
+- `k_offspring`, `save_every`
+- `use_gpu`, `gpu_device`
+
+Metodos soportados:
+
+- Seleccion: `Elite`, `Ruleta`, `Universal`, `Ranking`, `Boltzmann`, `TorneosDeterministicos`, `TorneosProbabilisticos`
+- Crossover: `OnePoint`, `TwoPoint`, `Uniform`, `Annular`, `Aritmetico`
+- Mutacion: `Gen`, `MultiGen`, `Uniforme`, `Completa`, `NoUniforme`, `Gaussiana`
+- Supervivencia: `Aditiva`, `Exclusiva`
+- Fitness: `MSE`, `MAE`, `GMSD`, `Oklab`, `MSSSIM`, `FSIM`, `SSIM`, `LinearMSE`
+
+Formato ponderado (opcional) para operadores:
+
+```json
+{
+  "crossover_methods": [
+    {"method": "OnePoint", "weight": 3.0},
+    {"method": "Uniform", "weight": 1.0}
+  ]
+}
+```
+
+## Archivos de salida
+
+En una corrida normal se generan en `output/`:
+
+- `output/final.png`
+- `output/triangles.json`
+- `output/metrics.csv`
+- `output/gen_XXXX.png` (si `save_every > 0`)
+
+## Experimentos
+
+Scripts disponibles en `experiments/`:
+
+- `exp_complejidad.py`
+- `exp_fitness.py`
+- `exp_inicializacion.py`
+- `exp_seleccion.py`
+- `exp_crossover.py`
+- `exp_mutacion.py`
+- `exp_supervivencia.py`
+- `exp_corte.py`
+- `exp_anti_estancamiento.py`
+- `exp_formas.py`
+- `exp_gpu.py`
+- `exp_num_triangulos.py` (multi-imagen)
+- `exp_triangulos.py` (imagen individual)
+- `exp_pc.py`
+- `exp_ponderado.py`
 
 Ejemplo:
 
 ```bash
-python3 main.py images/mona_lisa.png config.json
+.venv/bin/python experiments/exp_seleccion.py
 ```
 
-El programa carga la imagen objetivo, ejecuta el algoritmo genetico con la configuracion dada, y guarda los resultados en la carpeta `output/`.
+Opciones comunes que aceptan estos scripts:
 
-## Configuracion
+- `--max_generations`
+- `--seeds`
+- `--quick`
+- `--output`
 
-El archivo de configuracion es un JSON con los siguientes campos:
+## Generacion de graficos
 
-### Campos obligatorios
+Graficos por imagen/config:
 
-| Campo | Tipo | Rango/Valores | Descripcion |
-|---|---|---|---|
-| `triangle_count` | int | >= 1 | Cantidad maxima de figuras geometricas (triangulos o elipses) |
-| `population_size` | int | >= 2 | Tamano de la poblacion |
-| `max_generations` | int | >= 1 | Maximo de generaciones |
-| `fitness_threshold` | float | (0, 1] | Fitness objetivo para criterio de corte |
-| `selection_method` | str | ver metodos abajo | Metodo de seleccion principal (formato simple) |
-| `crossover_methods` | list | ver metodos abajo | Metodos de crossover (soporta pesos) |
-| `crossover_probability` | float | [0, 1] | Probabilidad de aplicar crossover a cada par |
-| `mutation_methods` | list | ver metodos abajo | Metodos de mutacion (soporta pesos) |
-| `mutation_rate` | float | [0, 1] | Probabilidad de mutar cada gen |
-| `survival_strategy` | str | "Aditiva", "Exclusiva" | Estrategia de supervivencia |
-| `fitness_function` | str | "MSE", "MAE" | Funcion de fitness |
-| `k_offspring` | int | >= 2 | Cantidad de hijos a generar por generacion |
-| `save_every` | int | >= 0 | Frecuencia de snapshots intermedios (0 = desactivado) |
-
-### Campos opcionales con defaults
-
-| Campo | Tipo | Default | Rango/Valores | Descripcion |
-|---|---|---|---|---|
-| `boltzmann_t0` | float | 100.0 | > 0 | Temperatura inicial para seleccion Boltzmann |
-| `boltzmann_tc` | float | 1.0 | > 0 | Temperatura minima para seleccion Boltzmann |
-| `boltzmann_k` | float | 0.01 | > 0 | Constante de decaimiento para Boltzmann |
-| `tournament_m` | int | 5 | >= 2 | Tamano del torneo deterministico |
-| `tournament_threshold` | float | 0.75 | [0.5, 1.0] | Umbral para torneo probabilistico |
-| `non_uniform_b` | float | 1.0 | > 0 | Parametro b de decaimiento para mutacion no uniforme |
-| `generational_gap` | float | 1.0 | [0, 1] | Brecha generacional G (fraccion de renovacion) |
-| `max_seconds` | float | 0.0 | >= 0 | Tiempo maximo en segundos (0 = sin limite) |
-| `content_threshold` | float | 0.0 | >= 0 | Umbral de cambio para criterio de contenido (0 = desactivado) |
-| `content_generations` | int | 0 | >= 0 | Generaciones a evaluar para criterio de contenido (0 = desactivado) |
-| `structure_threshold` | float | 0.0 | >= 0 | Umbral de diversidad para criterio de estructura (0 = desactivado) |
-| `structure_generations` | int | 0 | >= 0 | Generaciones consecutivas para criterio de estructura (0 = desactivado) |
-| `use_gpu` | bool | false | true/false | Usar renderer GPU con ModernGL |
-| `gpu_device` | str | "auto" | "auto", "dedicated", "integrated" | Politica de seleccion GPU: default del sistema, dedicada obligatoria o integrada obligatoria |
-| `min_error` | float | 0.0 | >= 0 | Error minimo para criterio de corte (0 = desactivado) |
-| `gene_type` | str | "triangle" | "triangle", "ellipse" | Tipo de gen/figura geometrica |
-| `arithmetic_alpha` | float | 0.5 | [0, 1] | Factor de interpolacion para crossover aritmetico |
-| `gaussian_sigma` | float | 0.1 | > 0 | Desviacion estandar para mutacion gaussiana |
-| `adaptive_operator_weights` | bool | false | true/false | Activa pesos adaptativos para seleccion y mutacion |
-| `adaptive_operator_delta` | float | 0.05 | > 0 | Premio/castigo fijo por generacion para pesos adaptativos |
-| `selection_methods` | list | [] | ver metodos abajo | Metodos de seleccion con pesos opcionales |
-| `selection_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de metodos de seleccion |
-| `crossover_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de crossover |
-| `mutation_weights` | list | [] | floats positivos | Pesos para seleccion ponderada de mutacion |
-
-En Linux hibrido, `gpu_device: "dedicated"` fuerza el intento de offload NVIDIA durante la creacion del contexto OpenGL. Si el contexto termina sobre otra GPU, la ejecucion falla en vez de continuar silenciosamente. `auto` respeta el contexto por defecto del sistema e `integrated` evita ese offload y valida que no haya quedado sobre una dedicada.
-
-### Operadores disponibles
-
-**Metodos de seleccion:** Elite, Ruleta, Universal, Ranking, Boltzmann, TorneosDeterministicos, TorneosProbabilisticos
-
-**Metodos de crossover:** OnePoint, TwoPoint, Uniform, Annular, Aritmetico
-
-**Metodos de mutacion:** Gen, MultiGen, Uniforme, Completa, NoUniforme, Gaussiana
-
-**Estrategias de supervivencia:** Aditiva, Exclusiva
-
-**Funciones de fitness:** MSE, MAE
-
-### Operadores ponderados
-
-Los campos de crossover, mutacion y seleccion soportan un formato con pesos para seleccion ponderada de operadores:
-
-```json
-{
-    "crossover_methods": [
-        {"method": "OnePoint", "weight": 3.0},
-        {"method": "Uniform", "weight": 1.0}
-    ]
-}
+```bash
+.venv/bin/python experiments/plot_results.py \
+  --input experiments/results/seleccion/1_Ucrania \
+  --output experiments/plots/seleccion/1_Ucrania \
+  --name "seleccion - 1_Ucrania" \
+  --avg_mode error_log
 ```
 
-Si se usan strings simples, todos los operadores tienen peso uniforme.
+Resumen cruzado entre imagenes:
 
-Si `adaptive_operator_weights` esta en `true`, la seleccion y la mutacion arrancan con probabilidad uniforme entre los metodos configurados. En cada generacion se compara el `best_fitness` nuevo contra el de la generacion anterior: si mejora, el metodo de seleccion y el de mutacion usados en esa generacion reciben un premio de `adaptive_operator_delta`; si no mejora, reciben un castigo del mismo valor. Luego los pesos se renormalizan para seguir sumando 1.0. El crossover no participa de esta logica adaptativa.
+```bash
+.venv/bin/python experiments/plot_cross_image.py \
+  --input experiments/results/seleccion \
+  --output experiments/plots/seleccion \
+  --name seleccion
+```
 
-### Criterios de corte
+## Batch runners
 
-El algoritmo se detiene cuando se cumple alguno de estos criterios:
+Runner general por campanias:
 
-1. **Generaciones maximas:** se alcanza `max_generations`
-2. **Fitness alcanzado:** el mejor individuo supera `fitness_threshold`
-3. **Tiempo maximo:** transcurren `max_seconds` segundos
-4. **Error minimo:** el error del mejor individuo baja de `min_error`
-5. **Contenido (estancamiento):** el fitness no mejora mas de `content_threshold` en `content_generations` generaciones
-6. **Estructura (convergencia):** la desviacion estandar del fitness esta bajo `structure_threshold` por `structure_generations` generaciones consecutivas
+```bash
+.venv/bin/python experiments/run_batch_tp.py \
+  --images images/1.jpg images/3.jpg \
+  --base-config run_configs/config.json \
+  --seed 42
+```
 
-## Archivos de salida
+Runner chico (solo seleccion):
 
-Todos los archivos se generan en la carpeta `output/`:
-
-| Archivo | Descripcion |
-|---|---|
-| `output/final.png` | Mejor imagen generada al finalizar |
-| `output/triangles.json` | Genes del mejor individuo serializados con metadatos |
-| `output/metrics.csv` | Metricas por generacion: best_fitness, avg_fitness, fitness_std, elapsed_seconds, generation_seconds y `log_line` |
-| `output/gen_XXXX.png` | Snapshots intermedios cada `save_every` generaciones |
-
-## Ejemplo de config.json
-
-```json
-{
-    "triangle_count": 30,
-    "population_size": 100,
-    "max_generations": 500,
-    "fitness_threshold": 0.95,
-    "selection_method": "Boltzmann",
-    "crossover_methods": ["Uniform"],
-    "crossover_probability": 0.7,
-    "mutation_methods": ["NoUniforme"],
-    "mutation_rate": 0.1,
-    "survival_strategy": "Aditiva",
-    "fitness_function": "MSE",
-    "k_offspring": 80,
-    "save_every": 50,
-    "boltzmann_t0": 100.0,
-    "boltzmann_tc": 1.0,
-    "boltzmann_k": 0.01,
-    "generational_gap": 0.8,
-    "max_seconds": 300,
-    "content_threshold": 0.0001,
-    "content_generations": 50
-}
+```bash
+.venv/bin/python experiments/run_batch_selection_only.py \
+  --images images/1.jpg \
+  --base-config run_configs/config.json \
+  --seed 42
 ```
 
 ## Tests
-
-Ejecutar la suite completa de tests:
 
 ```bash
 python3 -m pytest tests/ -v
 ```
 
-Sin tests de GPU (para entornos sin soporte):
-
-```bash
-python3 -m pytest tests/ --ignore=tests/test_gpu_renderer.py -v
-```
-
-Con reporte de tiempos:
-
-```bash
-python3 -m pytest tests/ -v --durations=10
-```
-
-## Experimentacion
-
-El directorio `experiments/` contiene scripts para ejecutar baterias de experimentos sistematicos:
-
-```bash
-# Experimento de metodos de seleccion
-python3 -m experiments.exp_seleccion
-
-# Experimento de metodos de crossover
-python3 -m experiments.exp_crossover
-
-# Experimento de metodos de mutacion
-python3 -m experiments.exp_mutacion
-
-# Experimento de cantidad de triangulos
-python3 -m experiments.exp_triangulos
-
-# Experimento de probabilidad de crossover
-python3 -m experiments.exp_pc
-
-# Experimento de estrategias de supervivencia
-python3 -m experiments.exp_supervivencia
-
-# Experimento de criterios de corte
-python3 -m experiments.exp_corte
-
-# Experimento de operadores ponderados
-python3 -m experiments.exp_ponderado
-```
-
-Batch grande para presentacion (1 o mas imagenes, campañas separadas por operador):
-
-```bash
-python3 -m experiments.run_batch_tp \
-  --images /ruta/img_objetivo.png \
-  --base-config run_configs/config.json \
-  --seed 42
-```
-
-Este runner fuerza en todas las corridas: `max_generations=15000`, `fitness_function=LinearMSE`, `save_every=100`, `max_seconds=0`, `triangle_count=700`, `elite_count=0` (elitismo desactivado).
-Las salidas se guardan en `output/batches/<batch_id>/<imagen>/<campania>/<config_slug>/run_seed_xxxx/` y se genera `manifest.csv` en la raiz del batch.
-
-Batch chico para pruebas rapidas (solo seleccion, sin combinaciones):
-
-```bash
-python3 -m experiments.run_batch_selection_only \
-  --images /ruta/img_objetivo.png \
-  --base-config run_configs/config.json \
-  --seed 42
-```
-
-Este runner mantiene los mismos parametros fijos del batch grande y solo varia `selection_method` en corridas individuales (7 por imagen).
-
-Los resultados se guardan en `experiments/results/` y los graficos generados en `experiments/plots/`.
-
-Para generar graficos a partir de resultados existentes:
-
-```bash
-python3 -m experiments.plot_results
-```
-
 ## Estructura del proyecto
 
-```
-config/          -- config loader y config.json
-genes/           -- Gene ABC, TriangleGene, EllipseGene, PolygonGene
-core/            -- Individual, Population, GeneticAlgorithm, MetricsCollector
-selection/       -- estrategias de seleccion (Elite, Ruleta, Universal, etc.)
-crossover/       -- operadores de crossover (OnePoint, TwoPoint, Uniform, etc.)
-mutation/        -- operadores de mutacion (Gen, MultiGen, Uniforme, etc.)
-fitness/         -- funciones de fitness (MSE, MAE)
-survival/        -- estrategias de supervivencia (Aditiva, Exclusiva)
-render/          -- renderers (CPU, GPU) y shaders
-experiments/     -- scripts de experimentacion y graficos
-output/          -- imagenes generadas, metrics.csv, triangles.json
-tests/           -- tests unitarios e integracion
-tasks/           -- especificaciones y trackeo de tareas SDD
+```text
+config/          loader y validacion de configuracion
+core/            algoritmo genetico, poblacion, metricas, island model
+genes/           representacion de genes (triangle/ellipse)
+selection/       operadores de seleccion
+crossover/       operadores de cruza
+mutation/        operadores de mutacion
+survival/        estrategias de supervivencia
+fitness/         funciones de fitness
+render/          render CPU/GPU y shaders
+experiments/     ejecucion de experimentos y generacion de plots
+run_configs/     configuraciones JSON de ejemplo
+output/          salida de corridas
+tests/           tests unitarios e integracion
 ```
 
 ## Autores
 
-[Grupo 8] -- Sistemas de Inteligencia Artificial, ITBA
+Grupo 8 - Sistemas de Inteligencia Artificial - ITBA
