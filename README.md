@@ -47,6 +47,48 @@ Ejemplo real del repo:
 python3 main.py images/1.jpg run_configs/config.json
 ```
 
+## Auto-configuracion segun complejidad
+
+`auto_config.py` analiza automaticamente la complejidad de la imagen y selecciona la configuracion optima antes de lanzar el GA.
+
+```bash
+python3 auto_config.py <ruta_imagen>
+```
+
+El script calcula la complejidad de la imagen usando la formula:
+
+```
+C = alpha * C_color + (1 - alpha) * C_forma    (alpha = 0.5)
+```
+
+Donde:
+- `C_color`: entropia del histograma de color RGB (diversidad cromatica).
+- `C_forma`: promedio ponderado por area de `(1 - solidez)` sobre regiones conectadas (irregularidad de formas).
+
+Segun el valor de `C` obtenido, se selecciona automaticamente una configuracion:
+
+| Clasificacion | Umbral       | Config usada            | Triangulos | Generaciones |
+|---------------|--------------|-------------------------|------------|--------------|
+| Baja          | C < 0.20     | `run_configs/bajo.json` | 50         | 500          |
+| Media         | 0.20 <= C < 0.45 | `run_configs/medio.json` | 100    | 1000         |
+| Alta          | C >= 0.45    | `run_configs/alto.json` | 200        | 3000         |
+
+El script imprime el desglose completo antes de iniciar la ejecucion:
+
+```
+Analizando complejidad de la imagen...
+
+=== Resultado del analisis ===
+  Complejidad total  C       = 0.3412
+  Componente color   C_color = 0.4100
+  Componente forma   C_forma = 0.2724
+
+  Clasificacion: MEDIO
+  (C = 0.3412 en [0.20, 0.45) -> configuracion MEDIA)
+
+Usando configuracion: run_configs/medio.json
+```
+
 ## Configuracion
 
 La configuracion se carga desde JSON. Como punto de partida, usar:
