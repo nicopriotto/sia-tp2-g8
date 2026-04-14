@@ -95,22 +95,95 @@ La configuracion se carga desde JSON. Como punto de partida, usar:
 
 - `run_configs/base-config.json`
 
-Campos principales:
+### Campos soportados por el JSON de entrada (completo)
 
-- `triangle_count`, `population_size`, `max_generations`, `fitness_threshold`
-- `selection_method` o `selection_methods`
-- `crossover_methods`, `crossover_probability`
-- `mutation_methods`, `mutation_rate`
-- `survival_strategy`, `fitness_function`
-- `k_offspring`, `save_every`
-- `use_gpu`, `gpu_device`
+#### 1) Campos obligatorios (parser)
+
+| Campo | Tipo | Descripcion |
+|---|---|---|
+| `triangle_count` | int | Cantidad de genes (figuras) por individuo. |
+| `population_size` | int | Tamaño de poblacion. |
+| `max_generations` | int | Tope de generaciones. |
+| `fitness_threshold` | float | Umbral de fitness para corte por objetivo. |
+| `crossover_probability` | float | Probabilidad de aplicar crossover. |
+| `mutation_rate` | float | Probabilidad de mutar. |
+| `survival_strategy` | str | Estrategia de supervivencia (`Aditiva`, `Exclusiva`). |
+| `fitness_function` | str | Funcion de fitness. |
+| `k_offspring` | int | Cantidad de hijos por generacion. |
+| `save_every` | int | Frecuencia de snapshots `gen_XXXX.png`. |
+
+#### 2) Campos de operadores y criterios generales
+
+| Campo | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `selection_method` | str o list | `Elite` | Metodo de seleccion (formato simple o lista legacy). |
+| `selection_methods` | list | `[]` | Lista de metodos de seleccion (tiene prioridad sobre `selection_method`). |
+| `crossover_methods` | list | `["OnePoint"]` | Lista de operadores de crossover. |
+| `mutation_methods` | list | `["Gen"]` | Lista de operadores de mutacion. |
+| `boltzmann_t0` | float | `100.0` | Temperatura inicial para Boltzmann. |
+| `boltzmann_tc` | float | `1.0` | Temperatura minima para Boltzmann. |
+| `boltzmann_k` | float | `0.01` | Decaimiento de temperatura Boltzmann. |
+| `tournament_m` | int | `5` | Tamaño de torneo deterministico. |
+| `tournament_threshold` | float | `0.75` | Umbral del torneo probabilistico. |
+| `non_uniform_b` | float | `1.0` | Parametro de decaimiento para mutacion no uniforme. |
+| `generational_gap` | float | `1.0` | Fraccion renovada por generacion. Debe estar en `[0,1]`. |
+| `max_seconds` | float | `0.0` | Corte por tiempo (0 desactiva). |
+| `content_threshold` | float | `0.0` | Umbral para criterio de contenido/estancamiento. |
+| `content_generations` | int | `0` | Ventana de generaciones para criterio de contenido. |
+| `structure_threshold` | float | `0.0` | Umbral para criterio de estructura/convergencia. |
+| `structure_generations` | int | `0` | Ventana para criterio de estructura. |
+| `min_error` | float | `0.0` | Corte por error minimo (0 desactiva). |
+
+#### 3) Campos de render y forma de gen
+
+| Campo | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `use_gpu` | bool | `false` | Activa renderer GPU si hay soporte. |
+| `gpu_device` | str | `auto` | `auto`, `dedicated`, `integrated`. |
+| `gene_type` | str | `triangle` | Tipo de gen (`triangle` o `ellipse`). |
 
 Notas de GPU:
 
 - `gpu_device` acepta `auto`, `dedicated` o `integrated`.
 - Si se configura `gpu_device: "dedicated"` y no hay GPU dedicada disponible, la ejecucion falla con error (no hace fallback silencioso a CPU).
 
-Metodos soportados:
+#### 4) Campos de operadores avanzados
+
+| Campo | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `arithmetic_alpha` | float | `0.5` | Alpha del crossover aritmetico. |
+| `gaussian_sigma` | float | `0.1` | Sigma geometrica para mutacion gaussiana. |
+| `gaussian_sigma_color` | float | `0.1` | Sigma de color/alpha (si falta, hereda `gaussian_sigma`). |
+| `gaussian_decay_b` | float | `0.0` | Decay de sigma por progreso (`0` sin decay). |
+| `gaussian_swap_rate` | float | `0.0` | Probabilidad de swap de capas (z-index). |
+| `smart_init` | bool | `false` | Inicializacion inteligente segun imagen objetivo. |
+| `elite_count` | int | `1` | Cantidad de elites usadas por operadores que lo requieran. |
+| `adaptive_operator_weights` | bool | `false` | Activa ajuste adaptativo de pesos en seleccion/mutacion. |
+| `adaptive_operator_delta` | float | `0.05` | Delta de premio/castigo de pesos adaptativos (> 0). |
+
+#### 5) Campos de anti-estancamiento
+
+| Campo | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `stagnation_check_interval` | int | `0` | Cada cuantas generaciones evaluar estancamiento (`0` desactiva). |
+| `stagnation_threshold` | float | `1e-5` | Mejora minima para no considerar estancamiento. |
+| `stagnation_mutation_boost` | float | `3.0` | Multiplicador de mutacion al detectar estancamiento. |
+| `stagnation_replace_pct` | float | `0.2` | Fraccion de poblacion a reemplazar al estancarse. |
+
+#### 6) Campos de Island Model
+
+| Campo | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `island_enabled` | bool | `false` | Activa modo multi-isla. |
+| `island_count` | int | `5` | Cantidad de islas (si `island_enabled=true`, debe ser `>= 2`). |
+| `island_migration_interval` | int | `50` | Intervalo de migracion (`>= 1`). |
+| `island_migration_count` | int | `2` | Migrantes por evento (`>=1` y `< population_size`). |
+| `island_topology` | str | `ring` | Topologia (`ring`, `fully_connected`). |
+| `island_configs` | list[dict] | `[]` | Overrides por isla; si se usa, su largo debe coincidir con `island_count`. |
+
+Cada elemento de `island_configs` puede incluir cualquier campo de `Config` excepto los globales del island model (`island_enabled`, `island_count`, `island_migration_interval`, `island_migration_count`, `island_topology`, `island_configs`, `max_generations`, `fitness_threshold`). Tambien acepta `name` solo para logging.
+
+#### 7) Validos por categoria
 
 - Seleccion: `Elite`, `Ruleta`, `Universal`, `Ranking`, `Boltzmann`, `TorneosDeterministicos`, `TorneosProbabilisticos`
 - Crossover: `OnePoint`, `TwoPoint`, `Uniform`, `Annular`, `Aritmetico`
@@ -118,16 +191,33 @@ Metodos soportados:
 - Supervivencia: `Aditiva`, `Exclusiva`
 - Fitness: `MSE`, `MAE`, `GMSD`, `Oklab`, `MSSSIM`, `FSIM`, `SSIM`, `LinearMSE`
 
-Formato ponderado (opcional) para operadores:
+#### 8) Formato ponderado para listas de operadores
+
+Los campos `selection_methods`, `crossover_methods` y `mutation_methods` aceptan:
+
+- strings (peso uniforme)
+- objetos `{ "method": "...", "weight": ... }` con peso positivo
+
+Ejemplo:
 
 ```json
 {
+  "selection_methods": [
+    {"method": "Boltzmann", "weight": 2.0},
+    {"method": "Ranking", "weight": 1.0}
+  ],
   "crossover_methods": [
-    {"method": "OnePoint", "weight": 3.0},
-    {"method": "Uniform", "weight": 1.0}
+    {"method": "Uniform", "weight": 3.0},
+    {"method": "TwoPoint", "weight": 1.0}
+  ],
+  "mutation_methods": [
+    {"method": "Gaussiana", "weight": 4.0},
+    {"method": "MultiGen", "weight": 1.0}
   ]
 }
 ```
+
+Nota: `selection_weights`, `crossover_weights` y `mutation_weights` son campos internos del objeto `Config`; se calculan automaticamente y no hace falta declararlos en el JSON.
 
 ## Archivos de salida
 
