@@ -3,7 +3,7 @@ Genera graficos comparativos a partir de los resultados de los experimentos.
 
 Salida:
 - Curvas fitness vs generacion (una linea por configuracion, banda de error con std)
-- Grid de imagenes: gen_0000, gen_0050, gen_0200, gen_0500, gen_3000/final (una fila por configuracion)
+- Grid de imagenes: gen_0000, gen_0050, gen_0200, gen_0500, gen_3000 (si existe) (una fila por configuracion)
 - Tabla comparativa: config | fitness_final_mean | fitness_final_std | generaciones para 90%
 
 Uso:
@@ -347,6 +347,9 @@ def create_image_grid(
     Una fila por configuracion (ordenada logicamente), una columna por generacion.
     Labels claros en filas (nombre config) y columnas (generacion).
     Usa la primera seed disponible para cada configuracion.
+
+    Solo muestra generaciones que realmente existan como gen_XXXX.png.
+    No reemplaza generaciones faltantes con final.png.
     """
     if not os.path.isdir(results_dir):
         print(f"Directorio no encontrado: {results_dir}")
@@ -361,8 +364,10 @@ def create_image_grid(
         print("Sin configuraciones para crear grid de imagenes.")
         return
 
-    # Recolectar imagenes disponibles
-    rows = []
+    # Recolectar seeds y generaciones disponibles por configuracion
+    rows_seed_paths = []
+    available_generations_per_row = []
+
     for config_name in configs:
         config_path = os.path.join(results_dir, config_name)
         seed_dirs = sorted([
@@ -374,26 +379,51 @@ def create_image_grid(
             continue
 
         seed_path = os.path.join(config_path, seed_dirs[0])
+
+        available_gens = set()
+        for file_name in os.listdir(seed_path):
+            match = re.match(r"gen_(\d{4})\.png$", file_name)
+            if match:
+                available_gens.add(int(match.group(1)))
+
+        if not available_gens:
+            continue
+
+        rows_seed_paths.append((config_name, seed_path))
+        available_generations_per_row.append(available_gens)
+
+    if not rows_seed_paths:
+        print("Sin imagenes para crear grid.")
+        return
+
+    # Mantener solo generaciones objetivo que existan al menos en una configuracion
+    selected_generations = [
+        gen for gen in generations
+        if any(gen in row_gens for row_gens in available_generations_per_row)
+    ]
+
+    if not selected_generations:
+        print("No hay generaciones objetivo disponibles para crear grid.")
+        return
+
+    if len(selected_generations) < len(generations):
+        missing = [gen for gen in generations if gen not in selected_generations]
+        print(f"Generaciones omitidas por falta de datos: {missing}")
+
+    # Recolectar imagenes por fila para las generaciones seleccionadas
+    rows = []
+    for config_name, seed_path in rows_seed_paths:
         row_images = []
-
-        for gen in generations:
+        for gen in selected_generations:
             img_path = os.path.join(seed_path, f"gen_{gen:04d}.png")
-            if not os.path.exists(img_path):
-                img_path = os.path.join(seed_path, "final.png")
-
             if os.path.exists(img_path):
                 row_images.append(np.array(Image.open(img_path)))
             else:
                 row_images.append(None)
-
         rows.append((config_name, row_images))
 
-    if not rows:
-        print("Sin imagenes para crear grid.")
-        return
-
     n_rows = len(rows)
-    n_cols = len(generations)
+    n_cols = len(selected_generations)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 3 * n_rows))
 
@@ -414,7 +444,7 @@ def create_image_grid(
 
             # Label de columna (generacion) en la primera fila
             if row_idx == 0:
-                ax.set_title(f"Gen {generations[col_idx]}", fontsize=11, fontweight="bold")
+                ax.set_title(f"Gen {selected_generations[col_idx]}", fontsize=11, fontweight="bold")
 
         # Label de fila (config) a la izquierda
         axes[row_idx, 0].annotate(

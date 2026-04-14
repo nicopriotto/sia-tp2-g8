@@ -24,7 +24,7 @@ echo "[5/12] Metodos de seleccion..."
 .venv/bin/python experiments/exp_seleccion.py --max_generations 3000
 
 echo "[6/12] Operadores de crossover..."
-.venv/bin/python experiments/exp_crossover.py
+.venv/bin/python experiments/exp_crossover.py --max_generations 3000
 
 echo "[7/12] Operadores de mutacion..."
 .venv/bin/python experiments/exp_mutacion.py

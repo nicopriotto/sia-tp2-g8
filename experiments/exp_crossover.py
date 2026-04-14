@@ -44,7 +44,7 @@ def main():
         configs=METHODS,
         output_base=output_base,
         seeds=seeds,
-        max_generations=max_gen,
+        max_generations=max_gen or 3000,
     )
 
     print(f"\nResultados guardados en: {output_base}")
