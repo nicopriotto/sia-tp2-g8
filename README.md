@@ -36,6 +36,11 @@ pip install matplotlib pandas seaborn Pillow
 python3 main.py <ruta_imagen> <ruta_config_json>
 ```
 
+Parametros de entrada:
+
+- `<ruta_imagen>`: path a la imagen objetivo (por ejemplo `images/1.jpg`).
+- `<ruta_config_json>`: path al archivo JSON de configuracion (por ejemplo `run_configs/config.json`).
+
 Ejemplo real del repo:
 
 ```bash
@@ -57,6 +62,11 @@ Campos principales:
 - `survival_strategy`, `fitness_function`
 - `k_offspring`, `save_every`
 - `use_gpu`, `gpu_device`
+
+Notas de GPU:
+
+- `gpu_device` acepta `auto`, `dedicated` o `integrated`.
+- Si se configura `gpu_device: "dedicated"` y no hay GPU dedicada disponible, la ejecucion falla con error (no hace fallback silencioso a CPU).
 
 Metodos soportados:
 
