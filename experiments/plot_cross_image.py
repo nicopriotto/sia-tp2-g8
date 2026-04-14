@@ -18,13 +18,12 @@ Uso:
 """
 import argparse
 import os
+import re
 import sys
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-
-import re
 
 try:
     import pandas as pd
@@ -41,7 +40,7 @@ except ImportError as e:
 
 def _natural_sort_key(name: str):
     """Ordena de forma logica: numeros por valor, texto alfabetico."""
-    parts = re.split(r'(\d+)', name)
+    parts = re.split(r"(\d+)", name)
     return [int(p) if p.isdigit() else p.lower() for p in parts]
 
 
@@ -52,7 +51,40 @@ def _pretty_config_label(name: str) -> str:
     return name
 
 
-def load_cross_image_data(results_dir: str) -> pd.DataFrame:
+def _parse_csv_list(raw: str) -> list[str]:
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def _parse_image_renames(raw: str) -> dict[str, str]:
+    """
+    Parsea mapping estilo: src1:dst1,src2:dst2.
+    """
+    mapping: dict[str, str] = {}
+    if not raw:
+        return mapping
+
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if ":" not in pair:
+            print(f"  Advertencia: mapping invalido '{pair}', se ignora")
+            continue
+        src, dst = pair.split(":", 1)
+        src = src.strip()
+        dst = dst.strip()
+        if not src or not dst:
+            print(f"  Advertencia: mapping invalido '{pair}', se ignora")
+            continue
+        mapping[src] = dst
+    return mapping
+
+
+def load_cross_image_data(
+    results_dir: str,
+    include_images: set[str] | None = None,
+    image_renames: dict[str, str] | None = None,
+) -> pd.DataFrame:
     """
     Carga datos de todas las imagenes y configs en un DataFrame unificado.
 
@@ -65,17 +97,22 @@ def load_cross_image_data(results_dir: str) -> pd.DataFrame:
     if not os.path.isdir(results_dir):
         return pd.DataFrame()
 
-    for img_dir in sorted(os.listdir(results_dir)):
+    for img_dir in sorted(os.listdir(results_dir), key=_natural_sort_key):
+        if include_images and img_dir not in include_images:
+            continue
+
         img_path = os.path.join(results_dir, img_dir)
         if not os.path.isdir(img_path):
             continue
 
-        for config_dir in sorted(os.listdir(img_path)):
+        img_label = image_renames.get(img_dir, img_dir) if image_renames else img_dir
+
+        for config_dir in sorted(os.listdir(img_path), key=_natural_sort_key):
             config_path = os.path.join(img_path, config_dir)
             if not os.path.isdir(config_path):
                 continue
 
-            for seed_dir in sorted(os.listdir(config_path)):
+            for seed_dir in sorted(os.listdir(config_path), key=_natural_sort_key):
                 seed_path = os.path.join(config_path, seed_dir)
                 csv_path = os.path.join(seed_path, "metrics.csv")
                 if not os.path.exists(csv_path):
@@ -107,19 +144,21 @@ def load_cross_image_data(results_dir: str) -> pd.DataFrame:
                     # Fitness en gen 0
                     fitness_gen0 = df["best_fitness"].iloc[0]
 
-                    rows.append({
-                        "imagen": img_dir,
-                        "config": config_dir,
-                        "seed": seed,
-                        "fitness_gen0": fitness_gen0,
-                        "fitness_final": final_fitness,
-                        "avg_fitness_final": final_avg,
-                        "fitness_std_final": final_std,
-                        "gen_total": total_gens,
-                        "gen_90pct": gen_90,
-                        "gen_95pct": gen_95,
-                        "elapsed_seconds": elapsed,
-                    })
+                    rows.append(
+                        {
+                            "imagen": img_label,
+                            "config": config_dir,
+                            "seed": seed,
+                            "fitness_gen0": fitness_gen0,
+                            "fitness_final": final_fitness,
+                            "avg_fitness_final": final_avg,
+                            "fitness_std_final": final_std,
+                            "gen_total": total_gens,
+                            "gen_90pct": gen_90,
+                            "gen_95pct": gen_95,
+                            "elapsed_seconds": elapsed,
+                        }
+                    )
                 except Exception as e:
                     print(f"  Error leyendo {csv_path}: {e}")
 
@@ -135,11 +174,17 @@ def plot_fitness_heatmap(
     """Heatmap: config x imagen -> fitness final medio."""
     pivot = data.groupby(["config", "imagen"])["fitness_final"].mean().unstack()
     pivot = pivot.loc[sorted(pivot.index, key=_natural_sort_key)]
+    pivot = pivot.reindex(columns=sorted(pivot.columns, key=_natural_sort_key))
 
     fig, ax = plt.subplots(figsize=(max(8, len(pivot.columns) * 2.5), max(4.8, len(pivot) * 1.05)))
     sns.heatmap(
-        pivot, annot=True, fmt=".4f", cmap="RdYlGn",
-        linewidths=0.5, vmin=pivot.values.min() * 0.98, vmax=min(1.0, pivot.values.max() * 1.005),
+        pivot,
+        annot=True,
+        fmt=".4f",
+        cmap="RdYlGn",
+        linewidths=0.5,
+        vmin=pivot.values.min() * 0.98,
+        vmax=min(1.0, pivot.values.max() * 1.005),
         cbar_kws={"label": "Fitness final"},
         ax=ax,
     )
@@ -171,10 +216,14 @@ def plot_convergence_heatmap(
     """Heatmap: config x imagen -> generacion para alcanzar 90% fitness."""
     pivot = data.groupby(["config", "imagen"])["gen_90pct"].mean().unstack()
     pivot = pivot.loc[sorted(pivot.index, key=_natural_sort_key)]
+    pivot = pivot.reindex(columns=sorted(pivot.columns, key=_natural_sort_key))
 
     fig, ax = plt.subplots(figsize=(max(8, len(pivot.columns) * 2.5), max(4.8, len(pivot) * 1.05)))
     sns.heatmap(
-        pivot, annot=True, fmt=".0f", cmap="RdYlGn_r",
+        pivot,
+        annot=True,
+        fmt=".0f",
+        cmap="RdYlGn_r",
         linewidths=0.5,
         cbar_kws={"label": "Generaciones para 90%"},
         ax=ax,
@@ -198,6 +247,10 @@ def plot_convergence_heatmap(
     print(f"  Heatmap convergencia guardado: {output_path}")
 
 
+def _images_label(n_images: int) -> str:
+    return "imagen" if n_images == 1 else "imagenes"
+
+
 def plot_grouped_bars(data: pd.DataFrame, title: str, output_path: str):
     """Barras agrupadas: fitness final por config, una barra por imagen."""
     summary = data.groupby(["config", "imagen"])["fitness_final"].agg(["mean", "std"]).reset_index()
@@ -217,12 +270,23 @@ def plot_grouped_bars(data: pd.DataFrame, title: str, output_path: str):
         img_data = summary[summary["imagen"] == img].set_index("config")
         means = [img_data.loc[c, "mean"] if c in img_data.index else 0 for c in configs]
         stds = [img_data.loc[c, "std"] if c in img_data.index else 0 for c in configs]
-        ax.bar(x + i * width, means, width, label=img, color=colors[i],
-               yerr=stds, capsize=4, error_kw={"linewidth": 1.5, "capthick": 1.5})
+        ax.bar(
+            x + i * width,
+            means,
+            width,
+            label=img,
+            color=colors[i],
+            yerr=stds,
+            capsize=4,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
 
     ax.set_xlabel("Configuracion", fontsize=11)
     ax.set_ylabel("Fitness final", fontsize=11)
-    ax.set_title(f"Comparacion de fitness final en las 4 imagenes\n{title}", fontsize=13)
+    ax.set_title(
+        f"Comparacion de fitness final en {n_images} {_images_label(n_images)}\n{title}",
+        fontsize=13,
+    )
     ax.set_xticks(x + width * (n_images - 1) / 2)
     ax.set_xticklabels(configs, rotation=25, ha="right", fontsize=9)
     ax.legend(fontsize=9, title="Imagen")
@@ -257,12 +321,23 @@ def plot_gen0_bars(data: pd.DataFrame, title: str, output_path: str):
         img_data = summary[summary["imagen"] == img].set_index("config")
         means = [img_data.loc[c, "mean"] if c in img_data.index else 0 for c in configs]
         stds = [img_data.loc[c, "std"] if c in img_data.index else 0 for c in configs]
-        ax.bar(x + i * width, means, width, label=img, color=colors[i],
-               yerr=stds, capsize=4, error_kw={"linewidth": 1.5, "capthick": 1.5})
+        ax.bar(
+            x + i * width,
+            means,
+            width,
+            label=img,
+            color=colors[i],
+            yerr=stds,
+            capsize=4,
+            error_kw={"linewidth": 1.5, "capthick": 1.5},
+        )
 
     ax.set_xlabel("Configuracion", fontsize=11)
     ax.set_ylabel("Fitness en generacion 0", fontsize=11)
-    ax.set_title(f"Fitness inicial (gen 0) en las 4 imagenes\n{title}", fontsize=13)
+    ax.set_title(
+        f"Fitness inicial (gen 0) en {n_images} {_images_label(n_images)}\n{title}",
+        fontsize=13,
+    )
     ax.set_xticks(x + width * (n_images - 1) / 2)
     ax.set_xticklabels(configs, rotation=25, ha="right", fontsize=9)
     ax.legend(fontsize=9, title="Imagen")
@@ -285,14 +360,6 @@ def save_cross_summary(data: pd.DataFrame, output_path: str):
         time_mean=("elapsed_seconds", "mean"),
     ).round(4).reset_index()
 
-    # Agregar promedio por config
-    avg_by_config = data.groupby("config").agg(
-        fitness_mean=("fitness_final", "mean"),
-        gen_90_mean=("gen_90pct", "mean"),
-    ).round(4)
-    avg_by_config["imagen"] = "PROMEDIO"
-    avg_by_config = avg_by_config.reset_index()
-
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     summary.to_csv(output_path, index=False)
     print(f"  Tabla resumen guardada: {output_path}")
@@ -303,14 +370,24 @@ def process_experiment(
     output_dir: str,
     exp_name: str,
     include_configs: list[str] | None = None,
+    include_images: list[str] | None = None,
+    image_renames: dict[str, str] | None = None,
 ):
     """Procesa un experimento con estructura por imagen."""
     print(f"\n  Procesando analisis cruzado: {exp_name}")
 
-    data = load_cross_image_data(results_dir)
+    include_images_set = set(include_images) if include_images else None
+
+    data = load_cross_image_data(
+        results_dir,
+        include_images=include_images_set,
+        image_renames=image_renames,
+    )
+
     if include_configs:
         include_set = set(include_configs)
         data = data[data["config"].isin(include_set)]
+
     if data.empty:
         print(f"  Sin datos en {results_dir}")
         return
@@ -318,24 +395,28 @@ def process_experiment(
     y_axis_label = "Cantidad de triangulos" if exp_name == "num_triangulos" else "Configuracion"
 
     plot_fitness_heatmap(
-        data, exp_name,
+        data,
+        exp_name,
         os.path.join(output_dir, f"{exp_name}_heatmap_fitness.png"),
         y_label=y_axis_label,
     )
 
     plot_convergence_heatmap(
-        data, exp_name,
+        data,
+        exp_name,
         os.path.join(output_dir, f"{exp_name}_heatmap_convergencia.png"),
         y_label=y_axis_label,
     )
 
     plot_grouped_bars(
-        data, exp_name,
+        data,
+        exp_name,
         os.path.join(output_dir, f"{exp_name}_barras_comparacion.png"),
     )
 
     plot_gen0_bars(
-        data, exp_name,
+        data,
+        exp_name,
         os.path.join(output_dir, f"{exp_name}_barras_gen0.png"),
     )
 
@@ -352,15 +433,28 @@ def main():
     parser.add_argument("--all", action="store_true", help="Procesar todos los subdirectorios")
     parser.add_argument("--name", default=None, help="Nombre del experimento")
     parser.add_argument(
-        "--include_configs", default="",
-        help="Lista separada por comas de configuraciones a incluir (ej: cfg1,cfg2)"
+        "--include_configs",
+        default="",
+        help="Lista separada por comas de configuraciones a incluir (ej: cfg1,cfg2)",
+    )
+    parser.add_argument(
+        "--include_images",
+        default="",
+        help="Lista separada por comas de imagenes a incluir (ej: 1_Ucrania,3_Apple)",
+    )
+    parser.add_argument(
+        "--image_renames",
+        default="",
+        help="Mapping imagen_origen:imagen_alias separado por comas",
     )
 
     args = parser.parse_args()
-    include_configs = [c.strip() for c in args.include_configs.split(",") if c.strip()]
+    include_configs = _parse_csv_list(args.include_configs)
+    include_images = _parse_csv_list(args.include_images)
+    image_renames = _parse_image_renames(args.image_renames)
 
     if args.all:
-        for exp_name in sorted(os.listdir(args.input)):
+        for exp_name in sorted(os.listdir(args.input), key=_natural_sort_key):
             exp_path = os.path.join(args.input, exp_name)
             if os.path.isdir(exp_path) and exp_name != "complejidad":
                 process_experiment(
@@ -368,6 +462,8 @@ def main():
                     os.path.join(args.output, exp_name),
                     exp_name,
                     include_configs=include_configs,
+                    include_images=include_images,
+                    image_renames=image_renames,
                 )
     else:
         exp_name = args.name or os.path.basename(args.input.rstrip("/"))
@@ -376,6 +472,8 @@ def main():
             args.output,
             exp_name,
             include_configs=include_configs,
+            include_images=include_images,
+            image_renames=image_renames,
         )
 
 

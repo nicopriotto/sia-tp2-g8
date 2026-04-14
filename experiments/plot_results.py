@@ -223,6 +223,7 @@ def plot_avg_fitness_curves(
     title: str,
     output_path: str,
     avg_mode: str = "raw",
+    legend_loc: str = "lower right",
 ):
     """Grafica curvas de fitness promedio con modos raw, log(fitness) o log(1-fitness)."""
     if not data:
@@ -277,7 +278,7 @@ def plot_avg_fitness_curves(
     else:
         plt.ylabel("Fitness promedio de la poblacion", fontsize=12)
     plt.title(title, fontsize=14)
-    plt.legend(fontsize=10, loc="lower right")
+    plt.legend(fontsize=10, loc=legend_loc)
     plt.grid(True, alpha=0.3, which="both")
     plt.tight_layout()
 
@@ -425,7 +426,7 @@ def create_image_grid(
     n_rows = len(rows)
     n_cols = len(selected_generations)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 3 * n_rows))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.2 * n_cols, 3.1 * n_rows))
 
     # Asegurar que axes sea 2D
     if n_rows == 1:
@@ -444,12 +445,16 @@ def create_image_grid(
 
             # Label de columna (generacion) en la primera fila
             if row_idx == 0:
-                ax.set_title(f"Gen {selected_generations[col_idx]}", fontsize=11, fontweight="bold")
+                ax.set_title(
+                    f"Gen {selected_generations[col_idx]}",
+                    fontsize=15,
+                    fontweight="bold",
+                )
 
         # Label de fila (config) a la izquierda
         axes[row_idx, 0].annotate(
             config_name, xy=(-0.1, 0.5), xycoords="axes fraction",
-            fontsize=10, ha="right", va="center", fontweight="bold",
+            fontsize=13, ha="right", va="center", fontweight="bold",
         )
 
     plt.tight_layout()
@@ -534,11 +539,17 @@ def process_experiment(
     )
 
     # Curvas de fitness promedio
+    avg_legend_loc = "lower right"
+    exp_name_lower = experiment_name.lower()
+    if avg_mode == "error_log" and ("seleccion" in exp_name_lower or "crossover" in exp_name_lower):
+        avg_legend_loc = "upper right"
+
     plot_avg_fitness_curves(
         data,
         title=f"Fitness promedio - {experiment_name}",
         output_path=os.path.join(output_dir, f"{safe_name}_fitness_avg.png"),
         avg_mode=avg_mode,
+        legend_loc=avg_legend_loc,
     )
     if avg_small_multiples:
         plot_avg_fitness_small_multiples(

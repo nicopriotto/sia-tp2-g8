@@ -5,6 +5,7 @@ import numpy as np
 
 from render.gpu_renderer import GPURenderer, _classify_device_info, gpu_available
 from genes.triangle_gene import TriangleGene
+from genes.ellipse_gene import EllipseGene
 
 skip_no_gpu = pytest.mark.skipif(not gpu_available(), reason="GPU no disponible")
 
@@ -26,6 +27,16 @@ def _fixed_genes():
         TriangleGene(x1=0.0, y1=0.5, x2=0.5, y2=0.5, x3=0.25, y3=1.0, r=0, g=0, b=255, a=0.5),
         TriangleGene(x1=0.2, y1=0.0, x2=0.8, y2=0.0, x3=0.5, y3=0.4, r=128, g=128, b=0, a=0.7),
         TriangleGene(x1=0.6, y1=0.6, x2=1.0, y2=0.6, x3=0.8, y3=1.0, r=0, g=128, b=128, a=0.4),
+    ]
+    return np.array([g.to_row() for g in genes])
+
+
+def _fixed_ellipse_genes():
+    """3 EllipseGene rows para tests reproducibles."""
+    genes = [
+        EllipseGene(cx=0.3, cy=0.3, rx=0.2, ry=0.1, theta=0.0, r=255, g=0, b=0, a=0.9),
+        EllipseGene(cx=0.6, cy=0.5, rx=0.15, ry=0.25, theta=0.6, r=0, g=255, b=0, a=0.7),
+        EllipseGene(cx=0.5, cy=0.75, rx=0.25, ry=0.1, theta=1.2, r=0, g=0, b=255, a=0.6),
     ]
     return np.array([g.to_row() for g in genes])
 
@@ -93,6 +104,37 @@ def test_gpu_fitness_mae():
     gpu = GPURenderer(w, h, target)
     try:
         fitness = gpu.compute_fitness(genes, "mae")
+        assert 0 < fitness <= 1.0
+    finally:
+        gpu.release()
+
+
+@skip_no_gpu
+def test_gpu_render_ellipses_shape_and_content():
+    w, h = 64, 64
+    target = np.ones((h, w, 4), dtype=np.float32)
+    genes = _fixed_ellipse_genes()
+
+    gpu = GPURenderer(w, h, target)
+    try:
+        result = gpu.render(genes, w, h, gene_type="ellipse")
+        assert result.shape == (h, w, 4)
+        assert result.dtype == np.float32
+        # Debe haber al menos algun pixel no blanco.
+        assert np.any(result[:, :, :3] < 0.99)
+    finally:
+        gpu.release()
+
+
+@skip_no_gpu
+def test_gpu_fitness_mse_ellipses():
+    w, h = 48, 48
+    target = np.random.rand(h, w, 4).astype(np.float32)
+    genes = _fixed_ellipse_genes()
+
+    gpu = GPURenderer(w, h, target)
+    try:
+        fitness = gpu.compute_fitness(genes, "mse", gene_type="ellipse")
         assert 0 < fitness <= 1.0
     finally:
         gpu.release()

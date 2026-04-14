@@ -143,7 +143,7 @@ def gpu_available(preference: str = "auto") -> bool:
 
 class GPURenderer(Renderer):
     """
-    Renderer que usa ModernGL para renderizar triangulos en la GPU
+    Renderer que usa ModernGL para renderizar figuras en la GPU
     y calcular fitness directamente en shaders.
     """
 
@@ -168,7 +168,7 @@ class GPURenderer(Renderer):
 
         self._load_shaders()
 
-        # Framebuffer offscreen para renderizado de triangulos
+        # Framebuffer offscreen para renderizado
         self.render_texture = self.ctx.texture((width, height), 4, dtype='f4')
         self.render_fbo = self.ctx.framebuffer(color_attachments=[self.render_texture])
 
@@ -204,6 +204,13 @@ class GPURenderer(Renderer):
         self.triangle_program = self.ctx.program(
             vertex_shader=vert_src,
             fragment_shader=frag_src,
+        )
+
+        ellipse_vert_src = _read("ellipse.vert")
+        ellipse_frag_src = _read("ellipse.frag")
+        self.ellipse_program = self.ctx.program(
+            vertex_shader=ellipse_vert_src,
+            fragment_shader=ellipse_frag_src,
         )
 
         fullscreen_vert = """
@@ -276,7 +283,7 @@ class GPURenderer(Renderer):
 
     def render(self, genes: np.ndarray, width: int = None, height: int = None, gene_type: str = "triangle") -> np.ndarray:
         """
-        Renderiza un array de genes en la GPU (solo triangulos).
+        Renderiza un array de genes en la GPU.
 
         Retorna imagen como numpy array float32 (H, W, 4) en [0, 1].
         """
@@ -293,28 +300,10 @@ class GPURenderer(Renderer):
             active = genes[active_mask]
 
             if len(active) > 0:
-                n = active.shape[0]
-                # Vectorized packing: cada triangulo = 3 vertices x 6 floats (x, y, r, g, b, a)
-                vertex_data = np.empty((n, 3, 6), dtype='f4')
-                # Coordenadas de vertices
-                for v, (xi, yi) in enumerate([(0, 1), (2, 3), (4, 5)]):
-                    vertex_data[:, v, 0] = active[:, xi]
-                    vertex_data[:, v, 1] = active[:, yi]
-                # Color normalizado (compartido entre los 3 vertices)
-                for v in range(3):
-                    vertex_data[:, v, 2] = active[:, 6] / 255.0  # r
-                    vertex_data[:, v, 3] = active[:, 7] / 255.0  # g
-                    vertex_data[:, v, 4] = active[:, 8] / 255.0  # b
-                    vertex_data[:, v, 5] = active[:, 9]           # a
-
-                vbo = self.ctx.buffer(vertex_data.reshape(-1))
-                vao = self.ctx.vertex_array(
-                    self.triangle_program,
-                    [(vbo, '2f 4f', 'in_position', 'in_color')],
-                )
-                vao.render(mode=self.ctx.TRIANGLES)
-                vbo.release()
-                vao.release()
+                if gene_type == "ellipse":
+                    self._render_ellipses(active)
+                else:
+                    self._render_triangles(active)
 
         raw = self.render_fbo.read(components=4, dtype='f4')
         image = np.frombuffer(raw, dtype=np.float32).reshape((h, w, 4))
@@ -323,7 +312,7 @@ class GPURenderer(Renderer):
 
     def compute_fitness(self, genes: np.ndarray, fitness_type: str = "mse", gene_type: str = "triangle") -> float:
         """
-        Renderiza los triangulos y calcula el fitness enteramente en GPU.
+        Renderiza los genes y calcula el fitness enteramente en GPU.
 
         Returns:
             Fitness en rango (0, 1].
@@ -390,6 +379,62 @@ class GPURenderer(Renderer):
         mean_ssim = self._reduce(self.ssim_texture, self.ssim_reduction_levels)
         return float(np.clip(mean_ssim, 0.0, 1.0))
 
+    def _render_triangles(self, active: np.ndarray) -> None:
+        """Renderiza genes tipo triangle."""
+        n = active.shape[0]
+        # Cada triangulo = 3 vertices x 6 floats (x, y, r, g, b, a)
+        vertex_data = np.empty((n, 3, 6), dtype='f4')
+        for v, (xi, yi) in enumerate([(0, 1), (2, 3), (4, 5)]):
+            vertex_data[:, v, 0] = active[:, xi]
+            vertex_data[:, v, 1] = active[:, yi]
+        for v in range(3):
+            vertex_data[:, v, 2] = active[:, 6] / 255.0  # r
+            vertex_data[:, v, 3] = active[:, 7] / 255.0  # g
+            vertex_data[:, v, 4] = active[:, 8] / 255.0  # b
+            vertex_data[:, v, 5] = active[:, 9]          # a
+
+        vbo = self.ctx.buffer(vertex_data.reshape(-1))
+        vao = self.ctx.vertex_array(
+            self.triangle_program,
+            [(vbo, '2f 4f', 'in_position', 'in_color')],
+        )
+        vao.render(mode=self.ctx.TRIANGLES)
+        vbo.release()
+        vao.release()
+
+    def _render_ellipses(self, active: np.ndarray) -> None:
+        """Renderiza genes tipo ellipse."""
+        n = active.shape[0]
+        # Cada elipse = 2 triangulos (6 vertices) x 11 floats:
+        # corner(2), center(2), radii(2), theta(1), color(4)
+        vertex_data = np.empty((n, 6, 11), dtype='f4')
+
+        corners = np.array([
+            [-1.0, -1.0],
+            [1.0, -1.0],
+            [1.0, 1.0],
+            [-1.0, -1.0],
+            [1.0, 1.0],
+            [-1.0, 1.0],
+        ], dtype='f4')
+        vertex_data[:, :, 0:2] = corners[None, :, :]
+        vertex_data[:, :, 2:4] = active[:, None, 0:2]       # cx, cy
+        vertex_data[:, :, 4:6] = active[:, None, 2:4]       # rx, ry
+        vertex_data[:, :, 6] = active[:, None, 4]           # theta
+        vertex_data[:, :, 7] = active[:, None, 6] / 255.0   # r
+        vertex_data[:, :, 8] = active[:, None, 7] / 255.0   # g
+        vertex_data[:, :, 9] = active[:, None, 8] / 255.0   # b
+        vertex_data[:, :, 10] = active[:, None, 9]          # a
+
+        vbo = self.ctx.buffer(vertex_data.reshape(-1))
+        vao = self.ctx.vertex_array(
+            self.ellipse_program,
+            [(vbo, '2f 2f 2f 1f 4f', 'in_corner', 'in_center', 'in_radii', 'in_theta', 'in_color')],
+        )
+        vao.render(mode=self.ctx.TRIANGLES)
+        vbo.release()
+        vao.release()
+
     def _reduce(self, source_texture, reduction_levels) -> float:
         """Reduccion iterativa 2x2 hasta 1x1. Retorna media de canales RGB."""
         prev_texture = source_texture
@@ -449,6 +494,7 @@ class GPURenderer(Renderer):
             fbo.release()
         self.quad_vbo.release()
         self.triangle_program.release()
+        self.ellipse_program.release()
         self.fitness_mse_program.release()
         self.fitness_mae_program.release()
         self.fitness_ssim_program.release()

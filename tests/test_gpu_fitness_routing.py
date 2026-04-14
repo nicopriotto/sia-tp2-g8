@@ -19,6 +19,11 @@ def individual():
     return Individual.random(3, gene_type="triangle")
 
 
+@pytest.fixture
+def individual_ellipse():
+    return Individual.random(3, gene_type="ellipse")
+
+
 def test_cpu_renderer_fallback(individual, target_image):
     """Con CPURenderer, individual.compute_fitness sigue funcionando (path CPU)."""
     renderer = CPURenderer()
@@ -60,4 +65,18 @@ def test_gpu_path_routes_mse(individual, target_image):
     assert individual.fitness == 0.92
     renderer.compute_fitness.assert_called_once_with(
         individual.genes, fitness_type="mse", gene_type="triangle"
+    )
+
+
+def test_gpu_path_routes_mse_ellipse(individual_ellipse, target_image):
+    """Cuando el individuo es ellipse, propaga gene_type al path GPU."""
+    renderer = MagicMock()
+    renderer.compute_fitness.return_value = 0.77
+    fitness_fn = MSEFitness()
+
+    individual_ellipse.compute_fitness(target_image, renderer, fitness_fn)
+
+    assert individual_ellipse.fitness == 0.77
+    renderer.compute_fitness.assert_called_once_with(
+        individual_ellipse.genes, fitness_type="mse", gene_type="ellipse"
     )
