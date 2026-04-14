@@ -1,7 +1,10 @@
 """
 Experimento: triangulos vs elipses.
 
-Compara gene_type="triangle" vs "ellipse" en las 4 imagenes principales.
+Compara gene_type="triangle" vs "ellipse" en 3 imagenes para presentacion:
+- 1_Ucrania (images/1.jpg)
+- 2_Apple (images/3.jpg)
+- 3_Cubista (images/4.jpg)
 """
 import os
 import sys
@@ -22,6 +25,12 @@ CONFIGS = [
     ("Elipse", {"gene_type": "ellipse"}),
 ]
 
+IMAGES = [
+    ("1_Ucrania", os.path.join(PROJECT_ROOT, "images", "1.jpg")),
+    ("2_Apple", os.path.join(PROJECT_ROOT, "images", "3.jpg")),
+    ("3_Cubista", os.path.join(PROJECT_ROOT, "images", "4.jpg")),
+]
+
 DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "experiments", "results", "formas")
 
 
@@ -38,6 +47,7 @@ def main():
         name="formas",
         configs=CONFIGS,
         output_base=output_base,
+        images=IMAGES,
         seeds=seeds,
         max_generations=max_gen,
     )
